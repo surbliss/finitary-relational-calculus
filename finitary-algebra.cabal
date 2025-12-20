@@ -1,79 +1,28 @@
-cabal-version:      2.4
+cabal-version:      3.0
 name:               finitary-algebra
-version:            0.1.0.0
-license:            MIT
-copyright:          2022 Thomas Holme Surlykke
-maintainer:         srid@srid.ca
-author:             Thomas Holme Surlykke
-category:           Web
-homepage:           https://srid.ca/finitary-algebra
+version:            1.0.0.0
+build-type:         Simple
 
--- TODO: Before hackage release.
--- A short (one-line) description of the package.
-synopsis:           A template for Haskell projects using Nix
+common common
+    default-language: Haskell2010
+    ghc-options: -Wall -fno-omit-yields
 
--- A longer description of the package.
--- description:
-
--- A URL where users can report bugs.
--- bug-reports:
-
-extra-source-files:
-  LICENSE
-  README.md
-
-common shared
-  -- ghc-options:
-    -- -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
-    -- -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
-    -- -fprint-explicit-foralls -fprint-explicit-kinds -Werror
-
-  mixins:
-    base hiding (Prelude),
-    relude (Relude as Prelude, Relude.Container.One),
-    relude
-
-  default-extensions:
-    DataKinds
-    DerivingStrategies
-    DerivingVia
-    LambdaCase
-    MultiWayIf
-    NoStarIsType
-    OverloadedStrings
-    StrictData
-    TypeFamilies
-    ViewPatterns
-    GHC2024
-
-  build-depends:
-    , aeson
-    , async
-    , base          >=4   && <5
-    , cond
-    , lattices
-    , data-default
-    , directory
-    , filepath
-    , mtl
-    , optics-core
-    , profunctors
-    , relude        >=1.0
-    , shower
-    , time
-    , vector-sized
-    , with-utf8
+library
+    import: common
+    hs-source-dirs: src
+    build-depends:
+        base
       , tasty
       , tasty-hunit
       , tasty-quickcheck
       , QuickCheck
+      , random
+    exposed-modules:
+        Finitary
+        Tests
 
-
-  hs-source-dirs:     src
-  default-language:   GHC2024
-
-test-suite test
-    import: shared
+test-suite finitary-algebra-test
+    import: common
     type: exitcode-stdio-1.0
     main-is: runtests.hs
     build-depends:
@@ -81,11 +30,110 @@ test-suite test
       , tasty
       , finitary-algebra
 
+executable run
+    import: common
+    main-is: Main.hs
+    build-depends:
+        base
+      , finitary-algebra
+      , random
+
+-- cabal-version:      3.0
+-- name:               finitary-algebra
+-- version:            0.1.0.0
+-- -- license:            MIT
+-- -- copyright:          2022 Thomas Holme Surlykke
+-- -- maintainer:         srid@srid.ca
+-- author:             Thomas Holme Surlykke
+-- build-type: Simple
+
+-- -- TODO: Before hackage release.
+-- -- A short (one-line) description of the package.
+-- -- synopsis:           A template for Haskell projects using Nix
+
+-- -- A longer description of the package.
+-- -- description:
+
+-- -- A URL where users can report bugs.
+-- -- bug-reports:
+
+-- -- extra-source-files:
+-- --   LICENSE
+-- --   README.md
+
+-- common shared
+--   -- ghc-options:
+--     -- -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
+--     -- -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
+--     -- -fprint-explicit-foralls -fprint-explicit-kinds -Werror
+
+--   mixins:
+--     base hiding (Prelude),
+--     relude (Relude as Prelude, Relude.Container.One),
+--     relude
+
+--   default-extensions:
+--     DataKinds
+--     DerivingStrategies
+--     DerivingVia
+--     LambdaCase
+--     MultiWayIf
+--     NoStarIsType
+--     OverloadedStrings
+--     StrictData
+--     TypeFamilies
+--     ViewPatterns
+--     GHC2024
+
+--   build-depends:
+--     relude
+
+--   hs-source-dirs:     src
+--   default-language:   Haskell2010
+
+-- library
+--   build-depends:
+--     , aeson
+--     , async
+--     , base          >=4   && <5
+--     , cond
+--     , lattices
+--     , data-default
+--     , directory
+--     , filepath
+--     , mtl
+--     , optics-core
+--     , profunctors
+--     , relude        >=1.0
+--     , shower
+--     , time
+--     , vector-sized
+--     , with-utf8
+--       , tasty
+--       , tasty-hunit
+--       , tasty-quickcheck
+--       , QuickCheck
+
+--   exposed-modules:
+--       Main
+--       Tests
+--       Finitary
+--   default-language:   Haskell2010
+
+-- test-suite test
+--     import: shared
+--     type: exitcode-stdio-1.0
+--     main-is: runtests.hs
+--     build-depends:
+--         base
+--       , tasty
+--       , finitary-algebra
 
 
-executable finitary-algebra
-  import:  shared
-  main-is: Main.hs
-  other-modules:
-      Tests
-      Finitary
+
+-- executable finitary-algebra
+--   import:  shared
+--   main-is: Main.hs
+--   build-depends:
+--       base
+--     , finitary-algebra

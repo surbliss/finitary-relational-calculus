@@ -5,4 +5,4 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit (Assertion, assertBool, assertFailure, testCase, (@?=))
 import Test.Tasty.QuickCheck (testProperty)
 
-tests = undefined
+tests = testCase "failing" $ assertBool False
