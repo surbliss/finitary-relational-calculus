@@ -6,12 +6,12 @@
       description = "A batteries-included Haskell project template for Nix";
       path = builtins.path { path = inputs.self; };
       welcomeText = ''
-        Please see https://srid.ca/boolean-database/start
+        Please see https://srid.ca/finitary-algebra/start
       '';
     };
 
     # https://omnix.page/om/init.html#spec
-    om.templates.boolean-database = {
+    om.templates.finitary-algebra = {
       template = templates.default;
       params = [
         {
@@ -22,7 +22,7 @@
         {
           name = "package-name";
           description = "Name of the Haskell package";
-          placeholder = "boolean-database";
+          placeholder = "finitary-algebra";
         }
         {
           name = "vscode";

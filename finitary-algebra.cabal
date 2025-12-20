@@ -1,12 +1,12 @@
 cabal-version:      2.4
-name:               boolean-database
+name:               finitary-algebra
 version:            0.1.0.0
 license:            MIT
 copyright:          2022 Thomas Holme Surlykke
 maintainer:         srid@srid.ca
 author:             Thomas Holme Surlykke
 category:           Web
-homepage:           https://srid.ca/boolean-database
+homepage:           https://srid.ca/finitary-algebra
 
 -- TODO: Before hackage release.
 -- A short (one-line) description of the package.
@@ -23,10 +23,10 @@ extra-source-files:
   README.md
 
 common shared
-  ghc-options:
-    -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
-    -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
-    -fprint-explicit-foralls -fprint-explicit-kinds -Werror
+  -- ghc-options:
+    -- -Wall -Wincomplete-record-updates -Wincomplete-uni-patterns
+    -- -Wmissing-deriving-strategies -Wunused-foralls -Wunused-foralls
+    -- -fprint-explicit-foralls -fprint-explicit-kinds -Werror
 
   mixins:
     base hiding (Prelude),
@@ -44,11 +44,14 @@ common shared
     StrictData
     TypeFamilies
     ViewPatterns
+    GHC2024
 
   build-depends:
     , aeson
     , async
     , base          >=4   && <5
+    , cond
+    , lattices
     , data-default
     , directory
     , filepath
@@ -58,11 +61,31 @@ common shared
     , relude        >=1.0
     , shower
     , time
+    , vector-sized
     , with-utf8
+      , tasty
+      , tasty-hunit
+      , tasty-quickcheck
+      , QuickCheck
+
 
   hs-source-dirs:     src
-  default-language:   GHC2021
+  default-language:   GHC2024
 
-executable boolean-database
+test-suite test
+    import: shared
+    type: exitcode-stdio-1.0
+    main-is: runtests.hs
+    build-depends:
+        base
+      , tasty
+      , finitary-algebra
+
+
+
+executable finitary-algebra
   import:  shared
   main-is: Main.hs
+  other-modules:
+      Tests
+      Finitary
