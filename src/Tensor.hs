@@ -1,7 +1,7 @@
 {-# LANGUAGE GHC2024 #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 
-module Finitary where
+module Tensor where
 
 import Data.Set (Set, intersection, union, unions, (\\))
 import Data.Set qualified as Set

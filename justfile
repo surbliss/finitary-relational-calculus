@@ -16,3 +16,6 @@ run:
 
 test:
     cabal test
+
+watch:
+    watchexec -e hs cabal test

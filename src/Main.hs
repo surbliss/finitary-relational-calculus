@@ -1,9 +1,13 @@
 {-# LANGUAGE GHC2024 #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 
 module Main where
 
 import Data.Set
 import Finitary
+
+set :: a -> Algebra 1 a
+set x = Base (Finite x)
 
 -- import Data.Vector.Sized
 -- import GHC.TypeLits (type (+))
@@ -64,10 +68,32 @@ import Finitary
 -- reduce (FSet x) = FSet x
 -- reduce (Empty) = Empty
 
+-- Example 1:
+s1 :: Algebra 1 String
+s1 = set "s1"
+s2 :: Algebra 1 String
+s2 = set "s2"
+s3 :: Algebra 1 String
+s3 = set "s3"
+t1 :: Algebra 1 String
+t1 = set "t1"
+t2 :: Algebra 1 String
+t2 = set "t2"
+t3 :: Algebra 1 String
+t3 = set "t3"
+
+p :: Algebra 2 String
+p = s1 >< t1
+
+q :: Algebra 2 String
+q = (s2 >< t2) \/ (s3 >< t3)
+
+-- Pretty Show
+pShow :: (Show a) => Algebra n a -> String
+pShow = undefined
 main :: IO ()
 main = do
-  putTextLn "Hello (from boolean-database)"
-  putTextLn $ show $ Finite $ singleton (2 :: Int)
+  putStrLn $ show $ Finite $ singleton (2 :: Int)
 
 ---------------------------------------------------
 -- Debug stuff
