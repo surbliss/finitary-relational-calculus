@@ -25,6 +25,7 @@ library
         Main
         Finitary
         Tensor
+        Algebra
         Tests
 
 test-suite finitary-algebra-test

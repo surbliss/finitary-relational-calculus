@@ -12,10 +12,41 @@ import GHC.TypeLits
 ---------------------------------------------------
 -- Datatypes
 ---------------------------------------------------
+
+-- Int?
+type Permutation = [Nat]
+
+data FOL (n :: Nat) a where
+  -- Cross product of
+  Predicate :: [Set a] -> FOL n a -- length list = n
+  And :: FOL n a -> FOL n a -> FOL n a
+  Or :: FOL n a -> FOL n a -> FOL n a
+  Not :: FOL n a -> FOL n a
+  Exists :: FOL n a -> FOL n a
+  Extend :: FOL n a -> FOL n a
+  Permute :: Permutation -> FOL n a -> FOL n a
+  Mod :: FOL n a -> FOL n a
+
+implies :: FOL n a -> FOL n a -> FOL n a
+implies x y = (Not x) `And` y
+
+forAll :: FOL n a -> FOL n a
+forAll x = Not (Exists (Not x))
+
+-- Should be instantiated with a being some sort of Set container
 data Finitary a where
   Finite :: a -> Finitary a
   Cofinite :: a -> Finitary a
   deriving (Eq)
+
+data Intersection a = Finitary a | Finitary a `Intersection` Finitary a
+
+data Product (n :: Nat) a = Product (Vector n (Intersection a))
+
+-- Empty list = empty set
+data Union (n :: Nat) a = Union [Product n a]
+
+type TensorTerm (n :: Nat) a = Union n a
 
 instance (Show a) => Show (Finitary a) where
   show (Finite x) = show x
@@ -35,6 +66,9 @@ infixr 6 :/\
 infixr 7 :><
 
 deriving instance (Show a) => Show (Algebra n a)
+
+translate :: FOL n a -> Algebra n a
+translate _ = undefined
 
 ---------------------------------------------------
 -- Type classes and implementations
@@ -72,6 +106,15 @@ instance forall n a. Complement (Algebra n a) where
   compl (x :/\ y) = compl x \/ compl y
   compl (x :>< y) = (Univ >< compl y) \/ (compl x >< univ y)
   compl (x :\/ y) = compl x /\ compl y
+
+normalize :: Algebra n a -> Algebra n a
+normalize (Base x) = Base x
+normalize Empty = Empty
+normalize Univ = Univ
+-- Intersections only allowed in each factor of product
+normalize (x :/\ y) = x /\ y
+normalize (x :\/ y) = x \/ y
+normalize (x :>< y) = x >< y
 
 -- Move the unions up, and intersections down into 1-dim algebras
 (\/) :: Algebra n a -> Algebra n a -> Algebra n a

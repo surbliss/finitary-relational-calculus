@@ -12,123 +12,77 @@ import GHC.TypeLits
 ---------------------------------------------------
 -- Datatypes
 ---------------------------------------------------
+-- One-dim algebra
 data Finitary a where
   Finite :: a -> Finitary a
   Cofinite :: a -> Finitary a
-  deriving (Eq)
+  Empty :: Finitary a
+  Univ :: Finitary a
+  (:/\) :: Finitary a -> Finitary a -> Finitary a -- Intersection
+  (:\/) :: Finitary a -> Finitary a -> Finitary a -- Union
 
-instance (Show a) => Show (Finitary a) where
-  show (Finite x) = show x
-  show (Cofinite x) = show x ++ "^c"
+type Product (n :: Nat) a = Vector n (Finitary a)
 
-data Algebra (n :: Nat) a where
-  Base :: Finitary a -> Algebra 1 a
-  Empty :: Algebra 1 a
-  Univ :: Algebra 1 a
-  -- Intersections only allowed in each factor of product
-  (:/\) :: Algebra 1 a -> Algebra 1 a -> Algebra 1 a -- Intersection
-  (:\/) :: Algebra n a -> Algebra n a -> Algebra n a -- Union
-  (:><) :: Algebra 1 a -> Algebra n a -> Algebra (1 + n) a -- Cross product
+-- Note: List empty shold be same thing as product of Empties
+data TensorTerm (n :: Nat) a where
+  Term :: [Product n a] -> TensorTerm n a
+
+-- Intersections only allowed in each factor of product
 
 infixr 5 :\/
 infixr 6 :/\
-infixr 7 :><
 
-deriving instance (Show a) => Show (Algebra n a)
+deriving instance (Show a) => Show (Finitary a)
 
 ---------------------------------------------------
 -- Type classes and implementations
 ---------------------------------------------------
-
-univ :: Algebra n a -> Algebra n a
-univ (_ :>< y) = Univ :>< univ y
-univ Empty = Univ
-univ Univ = Univ
-univ (Base _) = Univ
-univ (_ :/\ _) = Univ
-univ (x :\/ y) = univ x \/ univ y
-
-empty :: Algebra n a -> Algebra n a
-empty Empty = Empty
-empty Univ = Empty
-empty (Base _) = Empty
-empty (_ :>< y) = Empty :>< empty y
-empty (x :\/ y) = empty x :\/ empty y
-empty (_ :/\ _) = Empty
-
-class Complement a where
+class SetAlgebra a where
+  univ :: a
+  empty :: a
+  (\/) :: a -> a -> a
+  (/\) :: a -> a -> a
   compl :: a -> a
 
-instance Complement (Finitary a) where
-  compl (Finite s) = Cofinite s
-  compl (Cofinite s) = Finite s
+instance SetAlgebra (Finitary a) where
+  univ = Univ
 
-instance forall n a. Complement (Algebra n a) where
-  -- Move all complements _in_ to the Finitary constructors
-  compl :: Algebra n a -> Algebra n a
-  compl (Base x) = Base (compl x)
+  empty = Empty
+
+  -- Clean out identity-terms for union and intersection
+  Empty \/ x = x
+  x \/ Empty = x
+  Univ \/ _ = Univ
+  _ \/ Univ = Univ
+  x \/ y = x :\/ y
+
+  -- QUESTION: Should /\ be moved further in than \/?
+  Univ /\ x = x
+  x /\ Univ = x
+  Empty /\ _ = Empty
+  _ /\ Empty = Empty
+  x /\ y = x :/\ y
+
+  compl (Finite s) = Cofinite s
+  compl (Cofinite s) = Cofinite s
   compl Empty = Univ
   compl Univ = Empty
-  compl (x :/\ y) = compl x \/ compl y
-  compl (x :>< y) = (Univ >< compl y) \/ (compl x >< univ y)
   compl (x :\/ y) = compl x /\ compl y
+  compl (x :/\ y) = compl x \/ compl y
 
--- Move the unions up, and intersections down into 1-dim algebras
-(\/) :: Algebra n a -> Algebra n a -> Algebra n a
-s \/ Empty = s
-Empty \/ s = s
-_ \/ Univ = Univ
-Univ \/ _ = Univ
-x \/ y = x :\/ y
+instance (KnownNat n) => SetAlgebra (TensorTerm n a) where
+  univ = Term [Vec.replicate Univ]
+  empty = Term []
 
-(/\) :: Algebra n a -> Algebra n a -> Algebra n a
--- Unit elements
-_ /\ Empty = Empty
-Empty /\ _ = Empty
-s /\ Univ = s
-Univ /\ s = s
--- Base elements, so n=1
-Base s /\ x = Base s :/\ x
-x /\ Base s = x :/\ Base s
--- Distribution into unions
--- see (28) to (30)
-c /\ (d :\/ e) = (c /\ d) \/ (c /\ e)
-(c :\/ d) /\ e = (c /\ e) \/ (d /\ e)
-c /\ (d :/\ e) = c :/\ d :\/ e
-(c :/\ d) /\ e = c :/\ d :/\ e
--- Distribution over cross product
--- dim c = dim e = 1, and dim c + dim d = dim e + dim f, so must have dim d = dim f
-(c :>< d) /\ (e :>< f) = (c /\ e) >< (d /\ f)
+  Term xs \/ Term ys = Term (xs ++ ys)
 
-(><) :: Algebra n a -> Algebra m a -> Algebra (n + m) a
--- Unit-cross products
-Empty >< x = Empty :>< empty x
-Univ >< x = Univ :>< x
-Base s >< x = Base s :>< x
-x >< (y :\/ z) = (x >< y) \/ (x >< z)
-(x :\/ y) >< z = (x >< z) \/ (y >< z)
--- No reduction necessarry
-(x :/\ y) >< z = (x :/\ y) :>< z
-(x :>< y) >< z = x :>< (y >< z)
+  Term [] /\ Term _ = Term []
+  Term _ /\ Term [] = Term []
+  Term [x] /\ Term [y] = Term [prodIntersect x y]
+    where
+      prodIntersect ps qs = Vec.zipWith (/\) ps qs
 
--- -- eval (C x) = fCompl $ eval x
--- Evaluations of Finitaries
-evalUnion :: (Ord a) => Finitary (Set a) -> Finitary (Set a) -> Finitary (Set a)
-Finite s `evalUnion` Finite t = Finite (s `union` t)
-Finite s `evalUnion` Cofinite t = Cofinite (t \\ s)
-Cofinite s `evalUnion` Finite t = Cofinite (s \\ t)
-Cofinite s `evalUnion` Cofinite t = Cofinite (s `intersection` t)
+  compl x = undefined
 
-evalIntersection :: (Ord a) => Finitary (Set a) -> Finitary (Set a) -> Finitary (Set a)
-Finite s `evalIntersection` Finite t = Finite (s `intersection` t)
-Finite s `evalIntersection` Cofinite t = Finite (s \\ t)
-Cofinite s `evalIntersection` Finite t = Finite (t \\ s)
-Cofinite s `evalIntersection` Cofinite t = Cofinite (s `union` t)
-
-evalFinitary :: Algebra 1 (Set a) -> Finitary (Set a)
-evalFinitary (Base x) = x
-evalFinitary Empty = Finite (Set.empty)
-evalFinitary Univ = Cofinite (Set.empty)
-evalFinitary (_ :\/ _) = undefined
-evalFinitary (_ :/\ _) = undefined
-evalFinitary (_ :>< _) = error "Should be impossible"
+(><) :: Product n a -> Product m a -> Product (n + m) a
+x >< y = x Vec.++ y
