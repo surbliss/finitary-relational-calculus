@@ -1,12 +1,13 @@
 {-# LANGUAGE GHC2024 #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 
-module Algebra (Algebra (Empty, Univ), set, compl, (/\), (\/), (><), term) where
+module Algebra
+where
 
-import Data.Set (Set, intersection, union, unions, (\\))
-import Data.Set qualified as Set
-import Data.Vector.Sized (Vector)
-import Data.Vector.Sized qualified as Vec
+-- (FOL(..), Algebra (Empty, Univ), set, compl, (/\), (\/), (><), term)
+
+import GHC.TypeLits
 
 ---------------------------------------------------
 -- Datatypes
@@ -111,3 +112,27 @@ term a = [prod a]
     single (_ :\/ _) = error "oh no, union"
     single (_ :>< _) = error "oh no, product"
     single (C _) = error "oh no, complement"
+
+---------------------------------------------------
+-- Graveyard
+---------------------------------------------------
+
+-- Int?
+type Permutation = [Nat]
+
+data FOL (n :: Nat) a where
+  -- Cross product of
+  -- Predicate :: [Set a] -> FOL n a -- length list = n
+  And :: FOL n a -> FOL n a -> FOL n a
+  Or :: FOL n a -> FOL n a -> FOL n a
+  Not :: FOL n a -> FOL n a
+  Exists :: FOL n a -> FOL n a
+  Extend :: FOL n a -> FOL n a
+  Permute :: Permutation -> FOL n a -> FOL n a
+  Mod :: FOL n a -> FOL n a
+
+implies :: FOL n a -> FOL n a -> FOL n a
+implies x y = (Not x) `And` y
+
+forAll :: FOL n a -> FOL n a
+forAll x = Not (Exists (Not x))

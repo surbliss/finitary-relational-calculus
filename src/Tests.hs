@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
+
 module Tests (tests) where
 
 import Data.Set
@@ -11,4 +13,5 @@ import Test.Tasty.QuickCheck (testProperty)
 -- base :: (Ord a) => [a] -> Algebra a
 -- base xs = Base $ Finite $ fromList xs
 
+tests :: TestTree
 tests = testCase "" $ True @?= True

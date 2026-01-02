@@ -3,55 +3,32 @@
 
 module Main where
 
-import Data.Set
+import Finitary
 
--- import Finitary
-import Algebra
+-- import Algebra
 
 -- Example 1:
-s1 :: Algebra String
-s1 = set "s1"
-s2 :: Algebra String
-s2 = set "s2"
-s3 :: Algebra String
-s3 = set "s3"
-t1 :: Algebra String
-t1 = set "t1"
-t2 :: Algebra String
-t2 = set "t2"
-t3 :: Algebra String
-t3 = set "t3"
+s1 :: Term 1 String
+s1 = finite "s1"
+s2 :: Term 1 String
+s2 = finite "s2"
+s3 :: Term 1 String
+s3 = finite "s3"
+t1 :: Term 1 String
+t1 = finite "t1"
+t2 :: Term 1 String
+t2 = finite "t2"
+t3 :: Term 1 String
+t3 = finite "t3"
 
-p :: Algebra String
+p :: Term 2 String
 p = s1 >< t1
 
-q :: Algebra String
+q :: Term 2 String
 q = (s2 >< t2) \/ (s3 >< t3)
 
--- Pretty Show
-pShow :: (Show a) => Algebra a -> String
-pShow = undefined
+-- Repl-helpers:
 
 main :: IO ()
 main = do
-  putStrLn $ show (compl p /\ q)
-
----------------------------------------------------
--- Debug stuff
----------------------------------------------------
-{-
--- Triple complement
-reduce (Co (Co (Co (FSet [1,2]))))
-
--- Nested De Morgan
-reduce (Co ((FSet [1]) :/\ (FSet [2])))
-
--- Deep nesting with alternating ops
-reduce (Co ((Co (FSet [1]) :\/ FSet [2]) :/\ (FSet [3] :\/ Co (FSet [4]))))
-
--- Self-intersection with complement
-reduce ((FSet [1,2]) :/\ Co (FSet [1,2]))
-
--- Difference of complements
-reduce (Co (FSet [1]) :~~ Co (FSet [2]))
--}
+  pprint $ complement p /\ q
