@@ -15,3 +15,5 @@ result-*
 
 # Other
 material/
+*.zip
+.envrc

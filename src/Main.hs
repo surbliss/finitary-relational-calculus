@@ -5,8 +5,6 @@ module Main where
 
 import Finitary
 
--- import Algebra
-
 -- Example 1:
 s1 :: Term 1 String
 s1 = finite "s1"
@@ -26,8 +24,6 @@ p = s1 >< t1
 
 q :: Term 2 String
 q = (s2 >< t2) \/ (s3 >< t3)
-
--- Repl-helpers:
 
 main :: IO ()
 main = do
