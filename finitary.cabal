@@ -1,5 +1,5 @@
 cabal-version:      3.0
-name:               finitary-algebra
+name:               finitary
 license:            MIT
 version:            1.0.0.0
 build-type:         Simple
@@ -24,8 +24,6 @@ library
     exposed-modules:
         Main
         Finitary
-        Tensor
-        Algebra
         Tests
 
 test-suite finitary-algebra-test
@@ -38,7 +36,7 @@ test-suite finitary-algebra-test
       , tasty-hunit
       , tasty-quickcheck
       , QuickCheck
-      , finitary-algebra
+      , finitary
 
 
 executable run
@@ -46,5 +44,5 @@ executable run
     main-is: Main.hs
     build-depends:
         base
-      , finitary-algebra
+      , finitary
       , random

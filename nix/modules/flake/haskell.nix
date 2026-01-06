@@ -23,7 +23,7 @@
             inherit root;
             fileset = lib.fileset.unions [
               (root + /src)
-              (root + /finitary-algebra.cabal)
+              (root + /finitary.cabal)
               (root + /LICENSE)
               (root + /README.md)
             ];
