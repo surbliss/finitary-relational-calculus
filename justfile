@@ -12,7 +12,13 @@ repl *ARGS:
 
 # Run ghcid -- auto-recompile and run `main` function
 run:
-    ghcid -T :main
+    ghcid -T :main --test-message="" -W -q
+
+
+# Use 'inter' (for interactive) in Main as a repl
+inter:
+    ghcid -T :inter
+
 
 test:
     cabal test

@@ -26,7 +26,7 @@ library
         Finitary
         Tests
 
-test-suite finitary-algebra-test
+test-suite finitary-test
     import: common
     type: exitcode-stdio-1.0
     main-is: runtests.hs
@@ -41,8 +41,12 @@ test-suite finitary-algebra-test
 
 executable run
     import: common
+    hs-source-dirs: src
     main-is: Main.hs
     build-depends:
         base
       , finitary
+      , containers
+      , ghc-typelits-natnormalise
+      , vector-sized
       , random
