@@ -23,7 +23,11 @@ library
       , random
     exposed-modules:
         Main
+        Algebra
         Finitary
+        Query
+        Term
+        Eval
         Tests
 
 test-suite finitary-test

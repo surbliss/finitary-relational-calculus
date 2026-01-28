@@ -6,27 +6,8 @@
 
 module Finitary where
 
--- module Finitary (
---   Term,
---   Finitary,
---   Intersection,
---   Product,
---   Union,
---   empty,
---   univ,
---   finite,
---   cofinite,
---   complement,
---   (/\),
---   (\/),
---   (><),
---   pprint,
--- ) where
-
-import Control.Monad (foldM)
 import Data.Function ((&))
 import Data.List (intercalate)
-import Data.List qualified as List
 import Data.List.NonEmpty (NonEmpty ((:|)), nonEmpty, toList)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -95,6 +76,8 @@ proj = undefined
 
 diag :: Term n a -> Term (n + 1) a
 diag = undefined
+
+-- join?
 
 -- Evaluation: None if 'cofinite' returned
 eval :: Term n (Set a) -> Maybe (Set [a])
@@ -204,6 +187,7 @@ pattern Empty = Union []
 -- One-dimension Univeral
 pattern Univ1 :: Union a
 pattern Univ1 = Union [Product (Intersection [] :| [])]
+
 emptyUnion :: Union a
 emptyUnion = Union []
 
