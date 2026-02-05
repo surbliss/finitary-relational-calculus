@@ -1,7 +1,24 @@
 {-# LANGUAGE GHC2024 #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 
-module Term where
+module Term (
+  Term,
+  finite,
+  cofinite,
+  empty,
+  univ,
+  complement,
+  (/\),
+  (\/),
+  (><),
+  perm,
+  proj,
+  diag,
+  join,
+  eval,
+  pprint,
+)
+where
 
 import Algebra qualified as A
 import Eval (Result)
@@ -25,7 +42,7 @@ cofinite :: a -> Term 1 a
 cofinite x = Term $ A.single $ A.Cofinite x
 
 -- Need to specify dimension manually
-empty :: Term n a
+empty :: Term (n + 1) a
 empty = Term A.empty
 
 -- Always dim 1, for higher dim do univ >< univ >< ...
@@ -50,11 +67,15 @@ perm is (Term x) = Term $ A.perm is x
 
 -- If result is type Term 0 a, then it should always be the empty set
 -- Also remember to rerun \/, so terms can be normalized
-proj :: Term (n + 1) a -> Term n a
+proj :: Term (n + 2) a -> Term (n + 1) a
 proj (Term x) = Term $ A.proj x
 
-diag :: Term n a -> Term (n + 1) a
+diag :: Term (n + 2) a -> Term (n + 1) a
 diag (Term x) = Term $ A.diag x
+
+--
+join :: Int -> Term n a -> Term n a -> Term (n + 1) a
+join = undefined
 
 pprint :: (A.PrettyShow a) => Term n a -> IO ()
 pprint (Term x) = A.pprint x

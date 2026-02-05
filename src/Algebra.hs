@@ -100,17 +100,24 @@ instance InternalAlgebra Union where
   single = id -- Not needed
   -- DeMorgan
 
-  compl' (Union []) = empty
+  compl' (Union []) = error "TODO: Need a way to determine dimension here..."
   compl' (Union [x]) = compl' x
   compl' (Union (x : xs)) = compl' x /\ compl' (Union xs)
 
   Union [] /\ _ = empty
   _ /\ Union [] = empty
   -- (28)-(29)
-  Union (x : xs) /\ Union (y : ys) =
-    (x /\ y)
-      \/ (single x /\ Union ys)
-      \/ (Union xs /\ single y)
+  Union [x] /\ Union ys = foldl (\/) empty xIntersections
+    where
+      xIntersections = map (x /\) ys
+  Union (x : xs) /\ Union ys = (single x /\ Union ys) \/ (Union xs /\ Union ys)
+
+  -- Union [x] /\ Union (y : ys) = (x /\ y) \/ single x /\ Union ys
+  -- Union (x : xs) /\ Union (y : ys) =
+  --   (x /\ y)
+  --     \/ (single x /\ Union ys)
+  --     \/ (Union xs /\ single y)
+  --     \/ (Union xs /\ Union ys)
 
   -- (31)-(32) + emptyUnion products
   Union [] >< _ = empty
@@ -125,28 +132,44 @@ instance InternalAlgebra Union where
   x \/ Union [] = x
   Union [] \/ x = x
   -- Filter univs away here! I.e. 1 x 1 x 1
-  Union xs \/ Union ys = Union $ withoutUnivs $ xs <> ys
+  -- WRONG: Should not filter univs, should turn everything _into_ univ!
+  Union xs \/ Union ys
+    | hasUnivs = univs
+    | otherwise = Union $ xs <> ys
     where
-      withoutUnivs = filter (not . isUniv)
-      isUniv (Product (zs)) = all (\(Intersection is) -> null is) zs
+      hasUnivs = any isUniv xs || any isUniv ys
+      isUniv (Product zs) = all (\(Intersection is) -> null is) zs
+      univs = single $ Product $ NE.map (const $ Intersection []) $ ps
+      Product ps = xs !! 0
 
 --- Relational algegra-functions
 perm :: [Int] -> Union a -> Union a
 perm = undefined
 
+--- NOTE: We cut out the _first_ instead of last element, to optimize for
+-- Haskell Linked-list implementations
 proj :: Union a -> Union a
 -- Empty union.
 -- NOTE: Maybe proj on Ø should be an error instead? Hm
 proj (Union []) = empty
 -- First product has dim 1, so all products have dim 1, so projection is empty
-proj (Union (Product (_ :| []) : _)) = empty
+proj (Union (Product (_ :| []) : _)) = error ""
 -- By invariant that dims of xs are constant, _all_ dims are > 1 here.
-proj (Union xs) = Union $ map projProduct xs
-  where
-    projProduct (Product ys) = Product $ NE.fromList $ NE.init ys
+proj (Union xs) = foldl (\/) empty (map projProd xs)
+
+projProd :: Product a -> Union a
+projProd (Product (_ :| [])) = error "Term-constructor should prevent proj on dim=1"
+projProd (Product (_ :| y : ys)) = single $ Product $ y :| ys
 
 diag :: Union a -> Union a
-diag = undefined
+diag (Union []) = Union []
+diag (Union xs) = foldl (\/) empty (map diagProd xs)
+
+-- TODO: Normalize, to remove potential 'univs'
+diagProd :: Product a -> Union a
+diagProd (Product (_ :| [])) = error "Term-constructor should prevent diag on dim=1"
+diagProd (Product (Intersection xs :| Intersection ys : zs)) =
+  single $ Product (Intersection (xs <> ys) :| zs)
 
 ---------------------------------------------------
 

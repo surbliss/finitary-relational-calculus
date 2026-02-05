@@ -25,11 +25,26 @@ p = s1 >< t1
 q :: Term 2 String
 q = (s2 >< t2) \/ (s3 >< t3)
 
+exP :: Term 2 String
+exP = finite "S1" >< finite "T1"
+
+exQ :: Term 2 String
+exQ = (finite "S2" >< finite "T2") \/ (finite "S3" >< finite "T3")
+
+exR :: Term 2 String
+exR = (finite "R1" >< cofinite "R2") /\ (cofinite "L1" >< finite "L2")
+
+test1 :: Term 2 String
+test1 = complement p
+
+test2 :: Term 2 String
+test2 = complement p /\ q
+
 main :: IO ()
 main = do
-  pprint $ complement p
-  pprint $ complement p /\ q
-  print $ eval $ p
-  print $ eval $ q
-  print $ eval $ complement p
-  print $ eval $ complement p /\ q
+  pprint $ test2
+  pprint $ diag test2
+  pprint $ proj test2
+  print $ eval $ proj test2
+
+  print $ eval test2

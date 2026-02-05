@@ -8,12 +8,12 @@ module Query (Query (..)) where
 data Query a where
   Base :: a -> Query a
   Empty :: Query a
-  Univ :: Query a
+  Univ :: Int -> Query a
   Complement :: Query a -> Query a
   (:/\) :: Query a -> Query a -> Query a
   (:\/) :: Query a -> Query a -> Query a
-  (:><) :: Query a -> Query a -> Query  a
-
+  (:><) :: Query a -> Query a -> Query a
+  deriving (Eq)
 
 -- Permute :: [Int] -> Query n a -> Query n a
 -- Diagonal :: Query n a -> Query (n + 1) a
