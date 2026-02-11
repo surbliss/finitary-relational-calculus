@@ -12,12 +12,7 @@ repl *ARGS:
 
 # Run ghcid -- auto-recompile and run `main` function
 run:
-    ghcid -T :main --test-message="" -W -q
-
-
-# Use 'inter' (for interactive) in Main as a repl
-inter:
-    ghcid -T :inter
+    ghcid --command="ghci -isrc app/Main.hs" --run="main" --test-message="" -W -q
 
 
 test:
