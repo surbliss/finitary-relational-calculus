@@ -17,9 +17,11 @@ module Algebra (
   perm,
   proj,
   diag,
+  eq,
+  opp,
 ) where
 
-import Data.List (intercalate)
+import Data.List (intercalate, nub, tails)
 import Data.List.NonEmpty (NonEmpty ((:|)), nonEmpty, toList)
 import Data.List.NonEmpty qualified as NE
 
@@ -34,18 +36,28 @@ empty :: Union a
 empty = Union []
 
 --- 1-dimensional U
-univ1 :: Union a
+univ1 :: (Eq a) => Union a
 univ1 = single $ Intersection []
 
 --- Internal computations
 -- NOT to be exported, helper-functions for internal algebra-calculations
 class InternalAlgebra t where
   -- Each type is responsible for one of these, the rest propagates:
-  single :: t a -> Union a
-  compl' :: t a -> Union a -- Finitary
-  (/\) :: t a -> t a -> Union a -- Intersection
-  (><) :: t a -> t a -> Union a -- Product
-  (\/) :: t a -> t a -> Union a -- Union
+  single :: (Eq a) => t a -> Union a
+  compl' :: (Eq a) => t a -> Union a -- Finitary
+  (/\) :: (Eq a) => t a -> t a -> Union a -- Intersection
+  (><) :: (Eq a) => t a -> t a -> Union a -- Product
+  (\/) :: (Eq a) => t a -> t a -> Union a -- Union
+
+eq :: (Eq a) => Finitary a -> Finitary a -> Bool
+Finite x `eq` Finite y = x == y
+Cofinite x `eq` Cofinite y = x == y
+_ `eq` _ = False
+
+opp :: (Eq a) => Finitary a -> Finitary a -> Bool
+Finite x `opp` Cofinite y = x == y
+Cofinite x `opp` Finite y = x == y
+_ `opp` _ = False
 
 instance InternalAlgebra Finitary where
   single x = single $ Intersection [x]
@@ -53,8 +65,12 @@ instance InternalAlgebra Finitary where
   compl' (Finite x) = single $ Cofinite x
   compl' (Cofinite x) = single $ Finite x
 
+  x /\ y | x `eq` y = single x
+  x /\ y | x `opp` y = empty
   x /\ y = single x /\ single y
   x >< y = single x >< single y
+  x \/ y | x `eq` y = single x
+  x \/ y | x `opp` y = univ1
   x \/ y = single x \/ single y
 
 instance InternalAlgebra Intersection where
@@ -66,7 +82,11 @@ instance InternalAlgebra Intersection where
   compl' (Intersection (x : xs)) = compl' x \/ compl' (Intersection xs)
 
   -- Note that xs/ys = [] acts asunivUnion here!
-  Intersection xs /\ Intersection ys = single $ Intersection $ xs <> ys
+
+  Intersection xs /\ Intersection ys | True `elem` isOp = empty
+    where
+      isOp = [x `opp` y | (x : zs) <- tails (xs <> ys), y <- zs]
+  Intersection xs /\ Intersection ys = single $ Intersection $ nub $ xs <> ys
 
   x >< y = single $ Product $ x :| [y]
 
@@ -135,7 +155,7 @@ instance InternalAlgebra Union where
   -- WRONG: Should not filter univs, should turn everything _into_ univ!
   Union xs \/ Union ys
     | hasUnivs = univs
-    | otherwise = Union $ xs <> ys
+    | otherwise = Union $ nub $ xs <> ys
     where
       hasUnivs = any isUniv xs || any isUniv ys
       isUniv (Product zs) = all (\(Intersection is) -> null is) zs
@@ -146,27 +166,31 @@ instance InternalAlgebra Union where
 perm :: [Int] -> Union a -> Union a
 perm = undefined
 
---- NOTE: We cut out the _first_ instead of last element, to optimize for
--- Haskell Linked-list implementations
-proj :: Union a -> Union a
+--- First arg: Coordinate of removed val
+proj :: (Eq a) => Int -> Union a -> Union a
 -- Empty union.
 -- NOTE: Maybe proj on Ø should be an error instead? Hm
-proj (Union []) = empty
+proj i _ | i < 1 = error "Projection index under 1"
+proj _ (Union []) = empty
 -- First product has dim 1, so all products have dim 1, so projection is empty
-proj (Union (Product (_ :| []) : _)) = error ""
+proj _ (Union (Product (_ :| []) : _)) = error "One-dim product not allowed"
 -- By invariant that dims of xs are constant, _all_ dims are > 1 here.
-proj (Union xs) = foldl (\/) empty (map projProd xs)
+proj i (Union xs) = foldl (\/) empty (map (projProd i) xs)
 
-projProd :: Product a -> Union a
-projProd (Product (_ :| [])) = error "Term-constructor should prevent proj on dim=1"
-projProd (Product (_ :| y : ys)) = single $ Product $ y :| ys
+projProd :: (Eq a) => Int -> Product a -> Union a
+projProd i _ | i < 1 = error "projProd on index < 1"
+projProd 2 (Product (_ :| [])) = error "projProd index too large for list"
+projProd 2 (Product (x :| _ : ys)) = single $ Product $ x :| ys
+projProd _ (Product (_ :| [])) = error "Projuction-index too large for projProd"
+projProd 1 (Product (_ :| y : ys)) = single $ Product $ y :| ys
+projProd i (Product (x :| y : ys)) = single x >< projProd (i - 1) (Product $ y :| ys)
 
-diag :: Union a -> Union a
+diag :: (Eq a) => Union a -> Union a
 diag (Union []) = Union []
 diag (Union xs) = foldl (\/) empty (map diagProd xs)
 
 -- TODO: Normalize, to remove potential 'univs'
-diagProd :: Product a -> Union a
+diagProd :: (Eq a) => Product a -> Union a
 diagProd (Product (_ :| [])) = error "Term-constructor should prevent diag on dim=1"
 diagProd (Product (Intersection xs :| Intersection ys : zs)) =
   single $ Product (Intersection (xs <> ys) :| zs)

@@ -13,11 +13,17 @@ library
         base
       , containers
       , ghc-typelits-natnormalise
+      , QuickCheck
+      , tasty
+      , tasty-hunit
+      , tasty-quickcheck
 
     exposed-modules:
         Algebra
+        AlgebraSet
         Query
         Term
+        Tests
         Eval
 
 

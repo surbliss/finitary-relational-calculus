@@ -40,11 +40,98 @@ test1 = complement p
 test2 :: Term 2 String
 test2 = complement p /\ q
 
+--- Sus query
+-- Coord 1:Brands, 2:Products, 3:User, 4:Score
+-- B sub 1, P sub 1 x 2, S sub 2 x 3 x 4
+
+fins :: (Eq a) => [a] -> Term 1 a
+fins xs = foldl (\/) empty (map finite xs)
+
+pairs :: (Eq a) => [(a, a)] -> Term 2 a
+pairs xs = foldl (\/) empty (map finProd xs)
+  where
+    finProd (x, y) = finite x >< finite y
+
+--- Brands
+susB :: Term 1 String
+susB = fins ["Tuborg", "Harboe", "Thomas' bryghus", "Pepsi"]
+
+--- Products, for each brand. Each brand should have unique products (I think?)
+susP :: Term 2 String
+susP =
+  finite "Tuborg"
+    >< fins ["Tuborg classic", "Tuborg pilsner", "Squash"]
+    \/ finite "Harboe"
+    >< fins ["Harboe pilsner", "Harboe cola", "Harboe classic"]
+    \/ finite "Pepsi"
+    >< fins ["Pepsi cola", "Pepsi max"]
+
+--- Scores: Product + a User + their score
+-- Suspicious brands: Tuborg (from Mr SuS) and Harboe (From Jens)
+susS :: Term 3 String
+susS =
+  finite "Tuborg classic"
+    >< pairs [("Thomas", "3"), ("Mr Sus", "1"), ("Jens", "5")]
+    \/ finite "Tuborg classic"
+    >< pairs [("Thomas", "4"), ("Mr Sus", "1"), ("Jens", "5")]
+    \/ finite "Squash"
+    >< pairs [("Mr Sus", "1")]
+    \/ finite "Harboe pilsner"
+    >< pairs [("Thomas", "10"), ("Jens", "5")]
+    \/ finite "Harboe cola"
+    >< pairs [("Thomas", "2"), ("Jens", "5")]
+    \/ finite "Harboe classic"
+    >< pairs [("Thomas", "1"), ("Jens", "5")]
+    \/ finite "Pepsi cola"
+    >< pairs [("Thomas", "5")]
+    \/ finite "Pepsi max"
+    >< pairs [("Thomas", "3")]
+
+susQ :: Term 1 String
+susQ = susB /\ rhs
+  where
+    rhs = proj 4 $ proj 3 $ complement $ proj 2 $ (susP >< univ >< univ) /\ (univ >< complement susS)
+
+--- Building up, so we can test one inner term at a time
+
+fin :: (Eq a) => a -> Term 1 a
+fin = finite
+
+--- Sus query: 1 (because -1 rated 10 and 11 the same)
+susBB :: Term 1 Int
+susBB = fins [1, 2]
+
+susPP :: Term 2 Int
+susPP = fin 1 >< fins [10, 11] \/ fin 2 >< fins [20]
+
+susSS :: Term 3 Int
+susSS =
+  fin 10
+    >< pairs [(-1, 0)]
+    \/ fin 11
+    >< pairs [(-1, 0)]
+
+sus1 :: Term 4 Int
+sus1 = (susPP >< univ >< univ) /\ (univ >< complement susSS)
+
+-- Proj p
+sus2 :: Term 3 Int
+sus2 = proj 2 sus1
+
+x :: Term 1 Int
+x = fin 0
 main :: IO ()
 main = do
-  pprint $ test2
-  pprint $ diag test2
-  pprint $ proj test2
-  print $ eval $ proj test2
-
-  print $ eval test2
+  print "not (P -> S), aka not (not P union S), aka P inter not S"
+  let one = (susPP >< univ >< univ) /\ (univ >< complement susSS)
+  pprint $ one
+  print "Forall p . P -> S, aka not Exists p . Not (P -> S)"
+  let two = complement $ proj 2 $ one
+  pprint $ two
+  print "B inter exists u, s <above>"
+  let three = susBB /\ (proj 2 $ proj 2 $ two)
+  pprint $ three
+  print $ eval three
+  pprint $ susS
+  --- Stalls :(
+  pprint $ complement susS
