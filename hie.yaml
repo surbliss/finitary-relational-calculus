@@ -1,2 +1,10 @@
 cradle:
   cabal:
+    - path: "src"
+      component: "lib:finitary"
+
+    - path: "./"
+      component: "finitary:test:finitary-test"
+
+    - path: "src/Main.hs"
+      component: "finitary:exe:run"
