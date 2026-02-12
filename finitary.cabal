@@ -23,6 +23,7 @@ library
         AlgebraSet
         Query
         Term
+        TermSet
         Tests
         Eval
 
