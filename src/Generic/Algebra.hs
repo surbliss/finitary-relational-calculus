@@ -4,7 +4,7 @@
 {- | Internal constructors that maintain ordering of algebra terms.
 Not to be exported directly, but to be used internally only
 -}
-module Algebra (
+module Generic.Algebra (
   Finitary (..),
   Intersection (..),
   Product (..),

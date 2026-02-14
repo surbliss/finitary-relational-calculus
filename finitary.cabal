@@ -1,55 +1,54 @@
-cabal-version:      3.0
-name:               finitary
-license:            MIT
-version:            1.0.0.0
-build-type:         Simple
+cabal-version: 3.0
+name: finitary
+license: MIT
+version: 1.0.0.0
+build-type: Simple
 
 library
-    hs-source-dirs: src
-    ghc-options: -Wall
-    default-language: GHC2024
+  hs-source-dirs: src
+  ghc-options: -Wall
+  default-language: GHC2024
+  build-depends:
+    QuickCheck,
+    base,
+    containers,
+    ghc-typelits-natnormalise,
+    tasty,
+    tasty-hunit,
+    tasty-quickcheck,
 
-    build-depends:
-        base
-      , containers
-      , ghc-typelits-natnormalise
-      , QuickCheck
-      , tasty
-      , tasty-hunit
-      , tasty-quickcheck
-
-    exposed-modules:
-        Algebra
-        AlgebraSet
-        Query
-        Term
-        TermSet
-        Tests
-        Eval
-
+  exposed-modules:
+    Generic.Algebra
+    Generic.Eval
+    Generic.Term
+    PrettyShow
+    Set.Algebra
+    Set.Term
 
 executable run
-    hs-source-dirs: app
-    main-is: Main.hs
-    ghc-options: -Wall
-    default-language: GHC2024
-
-    build-depends:
-        base
-      , finitary
-      , containers
-      , ghc-typelits-natnormalise
-
+  hs-source-dirs: src
+  main-is: main.hs
+  ghc-options: -Wall
+  default-language: GHC2024
+  build-depends:
+    base,
+    containers,
+    finitary,
+    ghc-typelits-natnormalise,
 
 test-suite finitary-test
-    main-is: runtests.hs
-    ghc-options: -Wall
-    default-language: GHC2024
-    type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: runtests.hs
+  ghc-options: -Wall
+  default-language: GHC2024
+  type: exitcode-stdio-1.0
+  other-modules:
+    Generic.TestAlgebra
+    Generic.TestTerm
+    Set.TestAlgebra
+    Set.TestTerm
 
-    build-depends:
-        base
-      , finitary
-      , tasty
-
-
+  build-depends:
+    base,
+    finitary,
+    tasty,

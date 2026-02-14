@@ -3,7 +3,8 @@
 
 module Main where
 
-import TermSet
+import Finitary.PrettyShow
+import Finitary.Set.Term
 
 -- Example 1:
 s1 :: Term 1 String
@@ -66,26 +67,34 @@ susP =
     \/ finite ["Pepsi"]
     >< finite ["Pepsi cola", "Pepsi max"]
 
---- Scores: Product + a User + their score
+single :: (Ord a) => a -> Term 1 a
+single x = finite [x]
+
+pairs :: (Ord a) => [(a, a)] -> Term 2 a
+pairs xs = foldl (\/) (empty >< empty) (map finProd xs)
+  where
+    finProd (x, y) = single x >< single y
+
+-- Scores: Product + a User + their score
 -- Suspicious brands: Tuborg (from Mr SuS) and Harboe (From Jens)
--- susS :: Term 3 String
--- susS =
---   finite "Tuborg classic"
---     >< pairs [("Thomas", "3"), ("Mr Sus", "1"), ("Jens", "5")]
---     \/ finite "Tuborg classic"
---     >< pairs [("Thomas", "4"), ("Mr Sus", "1"), ("Jens", "5")]
---     \/ finite "Squash"
---     >< pairs [("Mr Sus", "1")]
---     \/ finite "Harboe pilsner"
---     >< pairs [("Thomas", "10"), ("Jens", "5")]
---     \/ finite "Harboe cola"
---     >< pairs [("Thomas", "2"), ("Jens", "5")]
---     \/ finite "Harboe classic"
---     >< pairs [("Thomas", "1"), ("Jens", "5")]
---     \/ finite "Pepsi cola"
---     >< pairs [("Thomas", "5")]
---     \/ finite "Pepsi max"
---     >< pairs [("Thomas", "3")]
+susS :: Term 3 String
+susS =
+  single "Tuborg classic"
+    >< pairs [("Thomas", "3"), ("Mr Sus", "1"), ("Jens", "5")]
+    \/ single "Tuborg classic"
+    >< pairs [("Thomas", "4"), ("Mr Sus", "1"), ("Jens", "5")]
+    \/ single "Squash"
+    >< pairs [("Mr Sus", "1")]
+    \/ single "Harboe pilsner"
+    >< pairs [("Thomas", "10"), ("Jens", "5")]
+    \/ single "Harboe cola"
+    >< pairs [("Thomas", "2"), ("Jens", "5")]
+    \/ single "Harboe classic"
+    >< pairs [("Thomas", "1"), ("Jens", "5")]
+    \/ single "Pepsi cola"
+    >< pairs [("Thomas", "5")]
+    \/ single "Pepsi max"
+    >< pairs [("Thomas", "3")]
 
 -- susQ :: Term 1 String
 -- susQ = susB /\ rhs
@@ -122,11 +131,11 @@ susP =
 -- x = fin 0
 main :: IO ()
 main = do
-  pprint $ complement q
+  -- Sus query:
+  print "------"
+  pprint $ susP >< univ >< univ
+  pprint $ proj 1 $ susP >< univ >< univ
 
--- pprint $ complement p
--- pprint $ complement p /\ q
--- pprint $ complement p /\ q
 -- print $ eval $ complement p /\ q
 
 -- print "not (P -> S), aka not (not P union S), aka P inter not S"

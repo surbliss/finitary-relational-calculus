@@ -1,11 +1,6 @@
 {-# LANGUAGE GHC2024 #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE PatternSynonyms #-}
 
-{- | Internal constructors that maintain ordering of algebra terms.
-Not to be exported directly, but to be used internally only
--}
-module AlgebraSet
+module Set.Algebra
 where
 
 -- (
@@ -32,6 +27,7 @@ import Data.List.NonEmpty (NonEmpty ((:|)), (<|))
 import Data.List.NonEmpty qualified as NE
 import Data.Set (Set)
 import Data.Set qualified as Set
+import PrettyShow
 
 -- data Base a = With (Set a) | Without (Set a) deriving (Eq, Show)
 
@@ -39,10 +35,10 @@ import Data.Set qualified as Set
 
 data Base a = With (Set a) | Without (Set a) deriving (Eq, Show, Ord)
 
-data SetAlgebra a where
-  Base :: Base a -> SetAlgebra a
-  Product :: NonEmpty (SetAlgebra a) -> SetAlgebra a
-  Union :: NonEmpty (SetAlgebra a) -> SetAlgebra a
+data Algebra a where
+  Base :: Base a -> Algebra a
+  Product :: NonEmpty (Algebra a) -> Algebra a
+  Union :: NonEmpty (Algebra a) -> Algebra a
   deriving (Eq, Show)
 
 ---------------------------------------------------
@@ -53,11 +49,11 @@ data SetAlgebra a where
 -- At some point, it might make sense to move 'Complement' up
 
 --- Only use on products
-dimProduct :: SetAlgebra a -> Int
+dimProduct :: Algebra a -> Int
 dimProduct (Product xs) = NE.length xs
 dimProduct _ = error "Took dim on non-product"
 
-dim :: SetAlgebra a -> Int
+dim :: Algebra a -> Int
 dim (Base _) = 1
 dim xs@(Product _) = dimProduct xs
 dim (Union xs) = firstDim
@@ -66,15 +62,15 @@ dim (Union xs) = firstDim
     firstDim = NE.head dims
     !_ = assert $ and $ (firstDim ==) <$> NE.tail dims
 
-isBase :: SetAlgebra a -> Bool
+isBase :: Algebra a -> Bool
 isBase (Base _) = True
 isBase _ = False
 
-isValidProduct :: SetAlgebra a -> Bool
+isValidProduct :: Algebra a -> Bool
 isValidProduct (Product xs) = all isBase xs
 isValidProduct _ = False
 
-isValidUnion :: SetAlgebra a -> Bool
+isValidUnion :: Algebra a -> Bool
 isValidUnion (Union xs) = all isValidProduct xs && constDim
   where
     -- Dimensions (crash if not products!)
@@ -82,24 +78,34 @@ isValidUnion (Union xs) = all isValidProduct xs && constDim
     constDim = and $ (== NE.head dims) <$> NE.tail dims
 isValidUnion _ = False
 
-isValid :: SetAlgebra a -> Bool
+isValid :: Algebra a -> Bool
 isValid x = isBase x || isValidProduct x || isValidUnion x
 
 ---------------------------------------------------
 -- Assertion stuff done
 ---------------------------------------------------
 
-fins :: (Ord a) => [a] -> SetAlgebra a
+fins :: (Ord a) => [a] -> Algebra a
 fins xs = Base $ With $ Set.fromList xs
 
-empty1 :: SetAlgebra a
+empty1 :: Algebra a
 empty1 = Base $ With $ Set.empty
 
+empty :: Int -> Algebra a
+empty n | n < 1 = error "Non-positive univ"
+empty 1 = empty1
+empty n = Product (NE.fromList (replicate n empty1))
+
 -- 1-dimensional U
-univ1 :: SetAlgebra a
+univ1 :: Algebra a
 univ1 = Base $ Without $ Set.empty
 
-isEmpty :: SetAlgebra a -> Bool
+univ :: Int -> Algebra a
+univ n | n < 1 = error "Non-positive univ"
+univ 1 = univ1
+univ n = Product (NE.fromList (replicate n univ1))
+
+isEmpty :: Algebra a -> Bool
 isEmpty s = assert (isValid s) $ case s of
   Base x -> isEmptyBase x
   Product xs -> any isEmpty xs
@@ -108,13 +114,14 @@ isEmpty s = assert (isValid s) $ case s of
     isEmptyBase (With x) = Set.null x
     isEmptyBase (Without _) = False
 
-toEmpty :: SetAlgebra a -> SetAlgebra a
+toEmpty :: Algebra a -> Algebra a
 toEmpty s = assert (isValid s) $ case s of
   Base _ -> empty1
-  Product xs -> Product (const empty1 <$> xs)
+  Product (_ :| []) -> empty1
+  Product xs@(_ :| _ : _) -> empty $ length xs
   Union (x :| _) -> toEmpty x
 
-isUniv :: SetAlgebra a -> Bool
+isUniv :: Algebra a -> Bool
 isUniv s = assert (isValid s) $ case s of
   Base x -> isUnivBase x
   Product xs -> all isUniv xs
@@ -123,13 +130,14 @@ isUniv s = assert (isValid s) $ case s of
     isUnivBase (With _) = False
     isUnivBase (Without x) = Set.null x
 
-toUniv :: SetAlgebra a -> SetAlgebra a
+toUniv :: Algebra a -> Algebra a
 toUniv s = assert (isValid s) $ case s of
   Base _ -> univ1
-  Product xs -> Product (const univ1 <$> xs)
-  Union xs -> Union (const univ1 <$> xs)
+  Product (_ :| []) -> univ1
+  Product xs@(_ :| _ : _) -> univ (length xs)
+  Union (x :| _) -> toUniv x
 
-single :: SetAlgebra a -> SetAlgebra a
+single :: Algebra a -> Algebra a
 single s = assert (isValid s) $ case s of
   x@(Base _) -> Union $ (Product (x :| [])) :| []
   x@(Product _) -> Union $ x :| []
@@ -137,12 +145,12 @@ single s = assert (isValid s) $ case s of
 
 --- All the below should return unions! So the types are consistent
 --- Actually, nvm, lets try without! Just simplify as much as possible
-compl :: (Ord a) => SetAlgebra a -> SetAlgebra a
+compl :: (Ord a) => Algebra a -> Algebra a
 compl s = assert (isValid s) $ case s of
   Base (With x) -> Base $ Without x
   Base (Without x) -> Base $ With x
   Product (x :| []) -> compl x
-  Product (x :| x' : xs) -> (compl x >< toUniv rest) \/ (univ1 >< compl rest)
+  Product (x :| x' : xs) -> (compl x >< univ (dim rest)) \/ (univ1 >< compl rest)
     where
       rest = Product (x' :| xs)
   Union (x :| []) -> compl x
@@ -157,10 +165,10 @@ baseIntersection s s' = case (s, s') of
   (Without x, With y) -> With $ y Set.\\ x
   (Without x, Without y) -> Without $ Set.union x y
 
-(/\) :: (Ord a) => SetAlgebra a -> SetAlgebra a -> SetAlgebra a
+(/\) :: (Ord a) => Algebra a -> Algebra a -> Algebra a
 s /\ s' = assert (isValid s || isValid s' || dim s == dim s') $ case (s, s') of
-  (_, _) | isEmpty s -> toEmpty s
-  (_, _) | isEmpty s' -> toEmpty s'
+  (_, _) | isEmpty s -> empty $ dim s
+  (_, _) | isEmpty s' -> empty $ dim s'
   (_, _) | isUniv s -> s'
   (_, _) | isUniv s' -> s
   (Base x, Base y) -> Base $ baseIntersection x y
@@ -187,7 +195,7 @@ baseUnion s s' = case (s, s') of
   (Without x, With y) -> Without $ x Set.\\ y
   (Without x, Without y) -> Without $ Set.intersection x y
 
-(\/) :: (Ord a) => SetAlgebra a -> SetAlgebra a -> SetAlgebra a
+(\/) :: (Ord a) => Algebra a -> Algebra a -> Algebra a
 s \/ s' = assert (isValid s || isValid s || dim s == dim s') $ case (s, s') of
   (_, _) | isEmpty s -> s'
   (_, _) | isEmpty s' -> s
@@ -214,10 +222,10 @@ s \/ s' = assert (isValid s || isValid s || dim s == dim s') $ case (s, s') of
   ((Base _), Product (_ :| _ : _)) -> error "Base union dim>2"
   (Product (_ :| _ : _), (Base _)) -> error "dim>2 union Base"
 
-(><) :: (Ord a) => SetAlgebra a -> SetAlgebra a -> SetAlgebra a
+(><) :: (Ord a) => Algebra a -> Algebra a -> Algebra a
 s >< s' = assert (isValid s || isValid s') $ case (s, s') of
   --- Simplify if argument empty (Nothing happens if univ)
-  (_, _) | isEmpty s || isEmpty s' -> toEmpty s >< toEmpty s'
+  (_, _) | isEmpty s || isEmpty s' -> empty $ dim s + dim s'
   --- Base operations (figure 2)
   (x@(Base _), y@(Base _)) -> Product (x :| [y])
   --- Singleton simplifications
@@ -227,9 +235,11 @@ s >< s' = assert (isValid s || isValid s') $ case (s, s') of
   (x, Product (y :| [])) -> x >< y
   --- Non-trivial Unions
   -- (32)
-  (Union (x :| x' : xs), y) -> (x >< y) \/ (Union (x' :| xs) >< y)
+  -- (Union (x :| x' : xs), y) -> (x >< y) \/ (Union (x' :| xs) >< y)
+  (Union xs@(_ :| _ : _), y) -> Union $ (>< y) <$> xs
   -- (31)
-  (x, Union (y :| y' : ys)) -> (x >< y) \/ (x >< Union (y' :| ys))
+  -- (x, Union (y :| y' : ys)) -> (x >< y) \/ (x >< Union (y' :| ys))
+  (x, Union ys@(_ :| _ : _)) -> Union $ (x ><) <$> ys
   -- (x@(Base _), Union (y :| y' : ys)) -> (x >< y) \/ (x >< Union (y' :| ys))
   -- (32)
   --- Products (Now there are no unions!)
@@ -237,48 +247,33 @@ s >< s' = assert (isValid s || isValid s') $ case (s, s') of
   (x@(Base _), Product xs@(_ :| _ : _)) -> Product $ x <| xs
   (Product xs@(_ :| _ : _), x@(Base _)) -> Product $ NE.appendList xs [x]
 
-class PrettyShow a where
-  pshow :: a -> String
+---------------------------------------------------
+-- FOL Query functions
+---------------------------------------------------
+--- Note that we only allow projections on dim > 2.
+proj :: (Ord a) => Int -> Algebra a -> Algebra a
+proj i _ | i < 1 = error "non-positive projection"
+proj i s | i > dim s = error "proj on i > dim"
+proj i s = assert (isValid s || dim s > 1) $ case s of
+  Base _ -> error "base, dim = 1 of proj"
+  Product (_ :| []) -> error "prod, dim = 1 of proj"
+  Product (_ :| (x : xs)) -> case i of
+    1 -> Product $ x :| xs
+    _ -> proj (i - 1) $ Product (x :| xs)
+  Union (x :| []) -> proj i x
+  Union xs@(_ :| _ : _) -> foldl (\/) (empty (dim s)) (proj i <$> xs)
 
-withOp :: (PrettyShow a) => String -> [a] -> String
-withOp op xs = intercalate op (map pshow xs)
-
-withParens :: String -> String
-withParens s = "(" ++ s ++ ")"
-
-instance PrettyShow String where
-  pshow xs = xs
-
-instance PrettyShow Int where
-  pshow xs = show xs
-
-instance (PrettyShow a) => PrettyShow (Set a) where
-  pshow xs = "{" ++ intercalate ", " (map pshow (Set.elems xs)) ++ "}"
-
+-- proj i (Union xs) = foldl (\/) empty (map (projProd i) xs)
+---------------------------------------------------
+-- PrettyShow implementation
+---------------------------------------------------
 instance (PrettyShow a) => PrettyShow (Base a) where
   pshow (With x) | Set.null x = "∅"
   pshow (With x) = pshow x
   pshow (Without x) | Set.null x = "𝕌"
   pshow (Without x) = pshow x ++ "ᶜ"
 
-instance (PrettyShow a) => PrettyShow (SetAlgebra a) where
+instance (PrettyShow a) => PrettyShow (Algebra a) where
   pshow (Base x) = pshow x
   pshow (Product xs) = withParens $ intercalate " × " (map pshow $ NE.toList xs)
   pshow (Union xs) = withParens $ intercalate " ∪ " (map pshow $ NE.toList xs)
-
--- instance (PrettyShow a) => PrettyShow (Intersection a) where
---   pshow (Intersection []) = "𝕌"
---   pshow (Intersection [x]) = pshow x
---   pshow (Intersection xs) = withOp "∩" xs
-
--- instance (PrettyShow a) => PrettyShow (Product a) where
---   pshow (Product (x :| [])) = pshow x
---   pshow (Product xs) = withParens $ withOp " × " (toList xs)
-
--- instance (PrettyShow a) => PrettyShow (Union a) where
---   pshow (Union []) = "∅"
---   pshow (Union [x]) = pshow x
---   pshow (Union xs) = withOp " ∪ " xs
-
-pprint :: (PrettyShow a) => a -> IO ()
-pprint = putStrLn . pshow
