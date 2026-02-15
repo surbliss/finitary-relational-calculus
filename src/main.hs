@@ -3,8 +3,7 @@
 
 module Main where
 
-import Finitary.PrettyShow
-import Finitary.Set.Term
+import Set.Term
 
 -- Example 1:
 s1 :: Term 1 String
@@ -34,12 +33,6 @@ exQ = (finite ["S2"] >< finite ["T2"]) \/ (finite ["S3"] >< finite ["T3"])
 
 exR :: Term 2 String
 exR = (finite ["R1"] >< cofinite ["R2"]) /\ (cofinite ["L1"] >< finite ["L2"])
-
-test1 :: Term 2 String
-test1 = complement p
-
-test2 :: Term 2 String
-test2 = complement p /\ q
 
 --- Sus query
 -- Coord 1:Brands, 2:Products, 3:User, 4:Score
@@ -107,18 +100,18 @@ susS =
 -- fin = finite
 
 -- --- Sus query: 1 (because -1 rated 10 and 11 the same)
--- susBB :: Term 1 Int
--- susBB = fins [1, 2]
+susBB :: Term 1 Int
+susBB = fins [1, 2]
 
--- susPP :: Term 2 Int
--- susPP = fin 1 >< fins [10, 11] \/ fin 2 >< fins [20]
+susPP :: Term 2 Int
+susPP = single 1 >< fins [10, 11] \/ single 2 >< fins [20]
 
--- susSS :: Term 3 Int
--- susSS =
---   fin 10
---     >< pairs [(-1, 0)]
---     \/ fin 11
---     >< pairs [(-1, 0)]
+susSS :: Term 3 Int
+susSS =
+  single 10
+    >< pairs [(-1, 0)]
+    \/ single 11
+    >< pairs [(-1, 0)]
 
 -- sus1 :: Term 4 Int
 -- sus1 = (susPP >< univ >< univ) /\ (univ >< complement susSS)
@@ -133,21 +126,16 @@ main :: IO ()
 main = do
   -- Sus query:
   print "------"
-  pprint $ susP >< univ >< univ
-  pprint $ proj 1 $ susP >< univ >< univ
+  let l = susPP >< univ >< univ
+  let r = univ >< compl susSS
+  -- pprint l
+  -- pprint r
+  let inner = l /\ r
+  -- pprint inner
+  pprint $ inner
+  pprint $ proj 2 $ inner
+  let two = compl $ proj 2 $ inner
+  print ""
+  pprint $ compl $ l \/ l \/ l \/ l
 
--- print $ eval $ complement p /\ q
-
--- print "not (P -> S), aka not (not P union S), aka P inter not S"
--- let one = (susPP >< univ >< univ) /\ (univ >< complement susSS)
--- pprint $ one
--- print "Forall p . P -> S, aka not Exists p . Not (P -> S)"
--- let two = complement $ proj 2 $ one
--- pprint $ two
--- print "B inter exists u, s <above>"
--- let three = susBB /\ (proj 2 $ proj 2 $ two)
--- pprint $ three
--- print $ eval three
--- pprint $ susS
--- --- Stalls :(
--- pprint $ complement susS
+-- let inner = l /\ r

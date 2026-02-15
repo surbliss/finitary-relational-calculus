@@ -119,7 +119,7 @@ toEmpty s = assert (isValid s) $ case s of
   Base _ -> empty1
   Product (_ :| []) -> empty1
   Product xs@(_ :| _ : _) -> empty $ length xs
-  Union (x :| _) -> toEmpty x
+  Union (x :| _) -> empty $ dim  x
 
 isUniv :: Algebra a -> Bool
 isUniv s = assert (isValid s) $ case s of
@@ -251,17 +251,22 @@ s >< s' = assert (isValid s || isValid s') $ case (s, s') of
 -- FOL Query functions
 ---------------------------------------------------
 --- Note that we only allow projections on dim > 2.
+-- Helper-function
+removeIndex  :: Int -> NonEmpty a -> NonEmpty a
+removeIndex i _ | i<1 = error "removing non-positive index"
+removeIndex _ (_ :| []) = error "removing index on dim=1 list"
+removeIndex 1 (_ :| x : xs) = x :| xs
+removeIndex i (x :| x' : xs) = x :| NE.toList (removeIndex (i-1) (x' :| xs))
+
+
 proj :: (Ord a) => Int -> Algebra a -> Algebra a
 proj i _ | i < 1 = error "non-positive projection"
 proj i s | i > dim s = error "proj on i > dim"
-proj i s = assert (isValid s || dim s > 1) $ case s of
-  Base _ -> error "base, dim = 1 of proj"
-  Product (_ :| []) -> error "prod, dim = 1 of proj"
-  Product (_ :| (x : xs)) -> case i of
-    1 -> Product $ x :| xs
-    _ -> proj (i - 1) $ Product (x :| xs)
-  Union (x :| []) -> proj i x
-  Union xs@(_ :| _ : _) -> foldl (\/) (empty (dim s)) (proj i <$> xs)
+proj _ (Base _) = error "base dim = 1, should be caught by other check"
+proj i s = assert (isValid s) $ case s of
+  Product xs -> Product (removeIndex i xs)
+  Union (x:| []) -> proj i x
+  Union xs -> Union (proj i <$> xs)
 
 -- proj i (Union xs) = foldl (\/) empty (map (projProd i) xs)
 ---------------------------------------------------

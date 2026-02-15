@@ -9,7 +9,7 @@ module Set.Term (
   cofinite,
   empty,
   univ,
-  complement,
+  compl,
   (/\),
   (\/),
   (><),
@@ -59,8 +59,8 @@ empty = Term A.empty1
 univ :: (Eq a) => Term 1 a
 univ = Term A.univ1
 
-complement :: (Ord a, Eq a) => Term n a -> Term n a
-complement (Term x) = Term $ A.compl x
+compl :: (Ord a, Eq a) => Term n a -> Term n a
+compl (Term x) = Term $ A.compl x
 
 --- Chose precedence to match the Term-structure:
 infixl 6 \/
