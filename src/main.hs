@@ -106,12 +106,6 @@ susBB = fins [1, 2]
 susPP :: Term 2 Int
 susPP = single 1 >< fins [10, 11] \/ single 2 >< fins [20]
 
-susSS :: Term 3 Int
-susSS =
-  single 10
-    >< pairs [(-1, 0)]
-    \/ single 11
-    >< pairs [(-1, 0)]
 
 -- sus1 :: Term 4 Int
 -- sus1 = (susPP >< univ >< univ) /\ (univ >< complement susSS)
@@ -122,20 +116,25 @@ susSS =
 
 -- x :: Term 1 Int
 -- x = fin 0
+susSS :: Term 3 Int
+susSS =
+  single 10
+    >< pairs [(-1, 0)]
+    \/ single 11
+    >< pairs [(-1, 0)]
+
+
 main :: IO ()
 main = do
-  -- Sus query:
-  print "------"
-  let l = susPP >< univ >< univ
-  let r = univ >< compl susSS
-  -- pprint l
-  -- pprint r
-  let inner = l /\ r
-  -- pprint inner
-  pprint $ inner
-  pprint $ proj 2 $ inner
-  let two = compl $ proj 2 $ inner
-  print ""
-  pprint $ compl $ l \/ l \/ l \/ l
-
--- let inner = l /\ r
+  pprint $ susS
+  let r = univ >< compl susS
+  pprint r
+  let l = susP >< univ >< univ
+  pprint l
+  let inner1 = compl $ proj 2 $ r /\ l
+  pprint inner1
+  let inner2 = proj 2 $ inner1
+  pprint inner2
+  let inner3 = proj 2 $ inner2
+  let susQ = susB /\ inner3
+  pprint susQ

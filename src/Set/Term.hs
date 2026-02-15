@@ -53,11 +53,11 @@ cofinite x = Term $ A.compl $ A.fins x
 
 -- Need to specify dimension manually
 empty :: Term 1 a
-empty = Term A.empty1
+empty = Term $ A.empty 1
 
 -- Always dim 1, for higher dim do univ >< univ >< ...
 univ :: (Eq a) => Term 1 a
-univ = Term A.univ1
+univ = Term $ A.univ 1
 
 compl :: (Ord a, Eq a) => Term n a -> Term n a
 compl (Term x) = Term $ A.compl x
