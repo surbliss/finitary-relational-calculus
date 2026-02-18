@@ -1,4 +1,5 @@
 {-# LANGUAGE GHC2024 #-}
+{-# LANGUAGE OverloadedLists #-}
 
 module Set.Algebra
 where
@@ -7,27 +8,29 @@ import Control.Exception (assert)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty ((:|)), (<|))
 import Data.List.NonEmpty qualified as NE
+import Data.IntSet qualified as IntSet
+import PrettyShow
 import Data.Set (Set)
 import Data.Set qualified as Set
-import Debug.Trace (trace)
-import PrettyShow
 
-data Base a = With (Set a) | Without (Set a) deriving (Eq, Show, Ord)
+type IntSet = IntSet.IntSet
 
-data Algebra a where
-  Base :: Base a -> Algebra a
+data Base = With IntSet | Without IntSet deriving (Eq, Show, Ord)
+
+data Algebra where
+  Base :: Base -> Algebra
   --- Always dim >= 2
-  Product :: NonEmpty (Algebra a) -> Algebra a
-  Union :: Set (Algebra a) -> Algebra a
+  Product :: NonEmpty Algebra -> Algebra
+  Union :: Set Algebra  -> Algebra
   deriving (Eq, Show, Ord)
 
 --- Non-normalized version
-data Query a where
-  QBase :: Base a -> Query a
-  (:><) :: Query a -> Query a -> Query a
-  (:\/) :: Query a -> Query a -> Query a
+data Query where
+  QBase :: Base -> Query
+  (:><) :: Query -> Query -> Query
+  (:\/) :: Query -> Query -> Query
 
-debugShow :: (Ord a) => Algebra a -> String
+debugShow ::  Algebra -> String
 debugShow x@(Base _) | isEmpty x = "Ø"
 debugShow x@(Base _) | isUniv x = "𝕌"
 debugShow (Base (With _)) = "F"
@@ -42,7 +45,7 @@ debugShow (Union xs) = "(U:" ++ show (debugShow `Set.map` xs) ++ ")"
 -- This asserts that the current form is a normal form. That is, Base < Complement < Product < Union
 -- At some point, it might make sense to move 'Complement' up
 
-dim :: (Ord a) => Algebra a -> Int
+dim :: Algebra -> Int
 dim (Base _) = 1
 dim (Product xs) = length xs
 dim (Union xs) = assert allSameDim $ firstDim
@@ -51,60 +54,60 @@ dim (Union xs) = assert allSameDim $ firstDim
     allSameDim = all (== firstDim) dims
     firstDim = Set.elemAt 0 dims
 
-isBase :: Algebra a -> Bool
+isBase :: Algebra -> Bool
 isBase (Base _) = True
 isBase _ = False
 
-isValidProduct :: Algebra a -> Bool
+isValidProduct :: Algebra -> Bool
 isValidProduct (Product xs) = all isBase xs
 isValidProduct _ = False
 
-isValidUnion :: (Ord a) => Algebra a -> Bool
+isValidUnion :: Algebra -> Bool
 isValidUnion s@(Union xs) =
   (dim s == 1 && all isBase xs) || (dim s > 1 && all isValidProduct xs)
 isValidUnion _ = False
 
-isValid :: (Ord a) => Algebra a -> Bool
+isValid :: Algebra -> Bool
 isValid x = isBase x || isValidProduct x || isValidUnion x
 
 ---------------------------------------------------
 -- Assertion stuff done
 ---------------------------------------------------
 
-fins :: (Ord a) => [a] -> Algebra a
-fins xs = Base $ With $ Set.fromList xs
+fins :: [Int] -> Algebra
+fins xs = Base $ With $ IntSet.fromList xs
 
-empty :: Int -> Algebra a
+empty :: Int -> Algebra
 empty n | n < 1 = error "Non-positive univ"
-empty 1 = Base $ With $ Set.empty
+empty 1 = Base $ With $ IntSet.empty
 empty n = Product (NE.fromList (replicate n (empty 1)))
 
-univ :: Int -> Algebra a
+univ :: Int -> Algebra
 univ n | n < 1 = error "Non-positive univ"
-univ 1 = Base $ Without $ Set.empty
+univ 1 = Base $ Without $ IntSet.empty
 univ n = Product (NE.fromList (replicate n (univ 1)))
 
-isEmpty :: (Ord a) => Algebra a -> Bool
+isEmpty :: Algebra -> Bool
 isEmpty s = assert (isValid s) $ case s of
   Base x -> isEmptyBase x
   Product xs -> any isEmpty xs
   Union xs -> all isEmpty xs
   where
-    isEmptyBase (With x) = Set.null x
+    isEmptyBase (With x) = IntSet.null x
     isEmptyBase (Without _) = False
 
-isUniv :: (Ord a) => Algebra a -> Bool
+isUniv :: Algebra -> Bool
 isUniv s = assert (isValid s) $ case s of
   Base x -> isUnivBase x
   Product xs -> all isUniv xs
   Union xs -> any isUniv xs
   where
     isUnivBase (With _) = False
-    isUnivBase (Without x) = Set.null x
+    isUnivBase (Without x) = IntSet.null x
 
 --- All the below should return unions! So the types are consistent
 --- Actually, nvm, lets try without! Just simplify as much as possible
-compl :: (Ord a) => Algebra a -> Algebra a
+compl :: Algebra -> Algebra
 compl s = case s of
   Base (With x) -> Base $ Without x
   Base (Without x) -> Base $ With x
@@ -119,14 +122,14 @@ compl s = case s of
 
 -- Set.fold (/\) (univ (dim s)) (compl `Set.map` xs)
 
-baseIntersection :: (Ord a) => Base a -> Base a -> Base a
+baseIntersection :: Base -> Base -> Base
 baseIntersection s s' = case (s, s') of
-  (With x, With y) -> With $ Set.intersection x y
-  (With x, Without y) -> With $ x Set.\\ y
-  (Without x, With y) -> With $ y Set.\\ x
-  (Without x, Without y) -> Without $ Set.union x y
+  (With x, With y) -> With $ IntSet.intersection x y
+  (With x, Without y) -> With $ x IntSet.\\ y
+  (Without x, With y) -> With $ y IntSet.\\ x
+  (Without x, Without y) -> Without $  x <> y
 
-(/\) :: (Ord a) => Algebra a -> Algebra a -> Algebra a
+(/\) :: Algebra -> Algebra -> Algebra
 s /\ s' = assert (isValid s && isValid s' && dim s == dim s') $ case (s, s') of
   (_, _) | isEmpty s -> empty $ dim s
   (_, _) | isEmpty s' -> empty $ dim s'
@@ -154,14 +157,14 @@ s /\ s' = assert (isValid s && isValid s' && dim s == dim s') $ case (s, s') of
   (Base _, Product (_ :| _ : _)) -> error "Base inter dim>2"
   (Product (_ :| _ : _), Base _) -> error "dim>2 inter base"
 
-baseUnion :: (Ord a) => Base a -> Base a -> Base a
+baseUnion :: Base -> Base -> Base
 baseUnion s s' = case (s, s') of
-  (With x, With y) -> With $ Set.union x y
-  (With x, Without y) -> Without $ y Set.\\ x
-  (Without x, With y) -> Without $ x Set.\\ y
-  (Without x, Without y) -> Without $ Set.intersection x y
+  (With x, With y) -> With $  x <> y
+  (With x, Without y) -> Without $ y IntSet.\\ x
+  (Without x, With y) -> Without $ x IntSet.\\ y
+  (Without x, Without y) -> Without $ IntSet.intersection x y
 
-(\/) :: (Ord a) => Algebra a -> Algebra a -> Algebra a
+(\/) :: Algebra -> Algebra -> Algebra
 s \/ s' = assert (isValid s) $
   assert (isValid s) $
     assert (dim s == dim s') $
@@ -185,7 +188,7 @@ s \/ s' = assert (isValid s) $
         (Product (_ :| _ : _), (Base _)) -> error "dim>2 union Base"
         (x@(Product (_ :| _ : _)), y@(Product (_ :| _ : _))) -> Union $ Set.fromList [x, y]
 
-(><) :: (Ord a) => Algebra a -> Algebra a -> Algebra a
+(><) :: Algebra -> Algebra -> Algebra
 s >< s' =
   -- trace (debugShow s ++ " >< " ++ debugShow s') $
   assert (isValid s && isValid s') $ case (s, s') of
@@ -218,7 +221,7 @@ removeIndex _ (_ :| []) = error "removing index on dim=1 list"
 removeIndex 1 (_ :| x : xs) = x :| xs
 removeIndex i (x :| x' : xs) = x :| NE.toList (removeIndex (i - 1) (x' :| xs))
 
-proj :: (Ord a) => Int -> Algebra a -> Algebra a
+proj :: Int -> Algebra -> Algebra
 proj i _ | i < 1 = error "non-positive projection"
 proj i s | i > dim s = error "proj on i > dim"
 proj _ (Base _) = error "base dim = 1, should be caught by other check"
@@ -235,13 +238,13 @@ proj i s = assert (isValid s) $ case s of
 ---------------------------------------------------
 -- PrettyShow implementation
 ---------------------------------------------------
-instance (PrettyShow a) => PrettyShow (Base a) where
-  pshow (With x) | Set.null x = "∅"
+instance  PrettyShow (Base) where
+  pshow (With x) | IntSet.null x = "∅"
   pshow (With x) = pshow x
-  pshow (Without x) | Set.null x = "𝕌"
+  pshow (Without x) | IntSet.null x = "𝕌"
   pshow (Without x) = pshow x ++ "ᶜ"
 
-instance (PrettyShow a) => PrettyShow (Algebra a) where
+instance  PrettyShow (Algebra) where
   pshow (Base x) = pshow x
   pshow (Product xs) = withParens $ intercalate " × " (map pshow $ NE.toList xs)
   pshow (Union xs) = withParens $ intercalate " ∪ " (map pshow $ Set.toList xs)

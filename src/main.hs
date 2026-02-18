@@ -6,135 +6,77 @@ module Main where
 import Set.Term
 
 -- Example 1:
-s1 :: Term 1 String
-s1 = finite ["s1"]
-s2 :: Term 1 String
-s2 = finite ["s2"]
-s3 :: Term 1 String
-s3 = finite ["s3"]
-t1 :: Term 1 String
-t1 = finite ["t1"]
-t2 :: Term 1 String
-t2 = finite ["t2"]
-t3 :: Term 1 String
-t3 = finite ["t3"]
+s1 :: Term 1
+s1 = fin 10
+s2 :: Term 1
+s2 = fin 20
+s3 :: Term 1
+s3 = fin 30
+t1 :: Term 1
+t1 = fin 1
+t2 :: Term 1
+t2 = fin 2
+t3 :: Term 1
+t3 = fin 3
 
-p :: Term 2 String
-p = s1 >< t1
+r1 :: Term 1
+r1 = fin 100
+r2 :: Term 1
+r2 = fin 200
+l1 :: Term 1
+l1 = fin 1000
+l2 :: Term 1
+l2 = fin 2000
 
-q :: Term 2 String
-q = (s2 >< t2) \/ (s3 >< t3)
+exP :: Term 2
+exP = s1 >< t1
 
-exP :: Term 2 String
-exP = finite ["S1"] >< finite ["T1"]
+exQ :: Term 2
+exQ = (s2 >< t2) \/ (s3 >< t3)
 
-exQ :: Term 2 String
-exQ = (finite ["S2"] >< finite ["T2"]) \/ (finite ["S3"] >< finite ["T3"])
-
-exR :: Term 2 String
-exR = (finite ["R1"] >< cofinite ["R2"]) /\ (cofinite ["L1"] >< finite ["L2"])
+exR :: Term 2
+exR = (r1 >< compl r2) /\ (compl l1 >< l2)
 
 --- Sus query
 -- Coord 1:Brands, 2:Products, 3:User, 4:Score
 -- B sub 1, P sub 1 x 2, S sub 2 x 3 x 4
+-- B(b=1), P(b=1, p=2), S(p=2, u=3, s=4)
+-- Solution : B /\ pi_u,s $ compl $ pi_p $ P >< 1 >< 1 /\ compl (1 >< S)
 
--- fins :: (Eq a) => [a] -> Term 1 a
--- fins xs = foldl (\/) empty (map finite xs)
 
--- pairs :: (Ord a, Eq a) => [(a, a)] -> Term 2 a
--- pairs xs = foldl (\/) (empty1 >< empty1) (map finProd xs)
---   where
---     finProd (x, y) = finite x >< finite y
-
---- Brands
-susB :: Term 1 String
-susB = finite ["Tuborg", "Harboe", "Thomas' bryghus", "Pepsi"]
-
---- Products, for each brand. Each brand should have unique products (I think?)
-susP :: Term 2 String
-susP =
-  finite ["Tuborg"]
-    >< finite ["Tuborg classic", "Tuborg pilsner", "Squash"]
-    \/ finite ["Harboe"]
-    >< finite ["Harboe pilsner", "Harboe cola", "Harboe classic"]
-    \/ finite ["Pepsi"]
-    >< finite ["Pepsi cola", "Pepsi max"]
-
-single :: (Ord a) => a -> Term 1 a
-single x = finite [x]
-
-pairs :: (Ord a) => [(a, a)] -> Term 2 a
+pairs ::  [(Int,Int)] -> Term 2
 pairs xs = foldl (\/) (empty >< empty) (map finProd xs)
   where
-    finProd (x, y) = single x >< single y
+    finProd (x, y) = fin x >< fin y
 
--- Scores: Product + a User + their score
--- Suspicious brands: Tuborg (from Mr SuS) and Harboe (From Jens)
-susS :: Term 3 String
-susS =
-  single "Tuborg classic"
-    >< pairs [("Thomas", "3"), ("Mr Sus", "1"), ("Jens", "5")]
-    \/ single "Tuborg classic"
-    >< pairs [("Thomas", "4"), ("Mr Sus", "1"), ("Jens", "5")]
-    \/ single "Squash"
-    >< pairs [("Mr Sus", "1")]
-    \/ single "Harboe pilsner"
-    >< pairs [("Thomas", "10"), ("Jens", "5")]
-    \/ single "Harboe cola"
-    >< pairs [("Thomas", "2"), ("Jens", "5")]
-    \/ single "Harboe classic"
-    >< pairs [("Thomas", "1"), ("Jens", "5")]
-    \/ single "Pepsi cola"
-    >< pairs [("Thomas", "5")]
-    \/ single "Pepsi max"
-    >< pairs [("Thomas", "3")]
+triples :: [(Int, Int, Int)] -> Term 3
+triples xs = foldl (\/) (empty >< empty >< empty) (map finProd xs)
+  where
+    finProd (x, y, z) = fin x >< fin y >< fin z
 
--- susQ :: Term 1 String
--- susQ = susB /\ rhs
---   where
---     rhs = proj 4 $ proj 3 $ complement $ proj 2 $ (susP >< univ >< univ) /\ (univ >< complement susS)
-
---- Building up, so we can test one inner term at a time
-
--- fin :: (Eq a) => a -> Term 1 a
--- fin = finite
 
 -- --- Sus query: 1 (because -1 rated 10 and 11 the same)
-susBB :: Term 1 Int
-susBB = fins [1, 2]
-
-susPP :: Term 2 Int
-susPP = single 1 >< fins [10, 11] \/ single 2 >< fins [20]
+-- All brands
+susB :: Term 1
+susB = fins [1, 2]
 
 
--- sus1 :: Term 4 Int
--- sus1 = (susPP >< univ >< univ) /\ (univ >< complement susSS)
+susP :: Term 2
+susP = pairs [(1,10), (1,11), (2, 20)]
 
--- -- Proj p
--- sus2 :: Term 3 Int
--- sus2 = proj 2 sus1
+susS :: Term 3
+susS = triples [(10, -1, 0), (11, -1, 0)]
 
--- x :: Term 1 Int
--- x = fin 0
-susSS :: Term 3 Int
-susSS =
-  single 10
-    >< pairs [(-1, 0)]
-    \/ single 11
-    >< pairs [(-1, 0)]
 
+--- Compute sus query
+-- B, P, S
+sus :: Term 1 -> Term 2 -> Term 3 -> Term 1
+sus b p s = b /\ (proj 2 $ proj 2 $ compl $ proj 2 $ (p >< univ >< univ) /\ (univ >< compl s))
 
 main :: IO ()
 main = do
+  pprint $ susB
+  pprint $ susP
   pprint $ susS
-  let r = univ >< compl susS
-  pprint r
-  let l = susP >< univ >< univ
-  pprint l
-  let inner1 = compl $ proj 2 $ r /\ l
-  pprint inner1
-  let inner2 = proj 2 $ inner1
-  pprint inner2
-  let inner3 = proj 2 $ inner2
-  let susQ = susB /\ inner3
-  pprint susQ
+  pprint $ (susP >< univ >< univ ) /\ (univ >< compl susS)
+  pprint $ sus susB susP susS

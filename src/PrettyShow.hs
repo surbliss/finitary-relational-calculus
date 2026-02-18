@@ -2,7 +2,10 @@ module PrettyShow where
 
 import Data.List (intercalate)
 import Data.Set (Set)
+
 import Data.Set qualified as Set
+import Data.IntSet (IntSet)
+import Data.IntSet qualified as IntSet
 
 class PrettyShow a where
   pshow :: a -> String
@@ -15,6 +18,9 @@ instance PrettyShow Int where
 
 instance (PrettyShow a) => PrettyShow (Set a) where
   pshow xs = "{" ++ intercalate ", " (map pshow (Set.elems xs)) ++ "}"
+
+instance  PrettyShow IntSet where
+  pshow xs = "{" ++ intercalate ", " (map pshow (IntSet.elems xs)) ++ "}"
 
 pprint :: (PrettyShow a) => a -> IO ()
 pprint = putStrLn . pshow

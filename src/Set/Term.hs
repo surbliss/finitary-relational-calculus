@@ -5,8 +5,8 @@ module Set.Term (
   Term,
   fins,
   cfins,
-  finite,
-  cofinite,
+  fin,
+  cfin,
   empty,
   univ,
   compl,
@@ -33,33 +33,33 @@ import GHC.TypeLits
 -- Datatypes
 ---------------------------------------------------
 -- Wrapper with dimension-info, i.e. length of Products
-newtype Term (n :: Nat) a = Term (A.Algebra a) deriving (Eq, Show)
+newtype Term (n :: Nat) = Term (A.Algebra) deriving (Eq, Show)
 
 ---------------------------------------------------
 -- Exported constructors
 ---------------------------------------------------
 --- For repl-testing
-fins :: [Int] -> Term 1 Int
-fins = finite
+fins ::  [Int] -> Term 1
+fins xs = Term $ A.fins xs
 
-cfins :: [Int] -> Term 1 Int
-cfins = cofinite
+cfins::  [Int] -> Term 1
+cfins x = Term $ A.compl $ A.fins x
 
-finite :: (Ord a, Eq a) => [a] -> Term 1 a
-finite xs = Term $ A.fins xs
+fin :: Int -> Term 1
+fin x =  fins [x]
 
-cofinite :: (Ord a, Eq a) => [a] -> Term 1 a
-cofinite x = Term $ A.compl $ A.fins x
+cfin :: Int -> Term 1
+cfin x = cfins [x]
 
 -- Need to specify dimension manually
-empty :: Term 1 a
+empty :: Term 1
 empty = Term $ A.empty 1
 
 -- Always dim 1, for higher dim do univ >< univ >< ...
-univ :: (Eq a) => Term 1 a
+univ ::  Term 1
 univ = Term $ A.univ 1
 
-compl :: (Ord a, Eq a) => Term n a -> Term n a
+compl ::  Term n  -> Term n
 compl (Term x) = Term $ A.compl x
 
 --- Chose precedence to match the Term-structure:
@@ -67,34 +67,34 @@ infixl 6 \/
 infixl 7 ><
 infixl 8 /\
 
-(/\) :: (Ord a, Eq a) => Term n a -> Term n a -> Term n a
+(/\) ::  Term n  -> Term n  -> Term n
 Term x /\ Term y = Term (x A./\ y)
 
-(><) :: (Ord a, Eq a) => Term n a -> Term m a -> Term (n + m) a
+(><) ::  Term n  -> Term m  -> Term (n + m)
 Term x >< Term y = Term (x A.>< y)
 
-(\/) :: (Ord a, Eq a) => Term n a -> Term n a -> Term n a
+(\/) ::  Term n  -> Term n  -> Term n
 Term x \/ Term y = Term (x A.\/ y)
 
 -- TODO: Permutation, projection and diagonalization
-perm :: [Int] -> Term n a -> Term n a
+perm :: [Int] -> Term n  -> Term n
 perm = undefined
 
--- If result is type Term 0 a, then it should always be the empty set
+-- If result is type Term 0 , then it should always be the empty set
 -- Also remember to rerun \/, so terms can be normalized
-proj :: (Ord a, Eq a) => Int -> Term (n + 2) a -> Term (n + 1) a
+proj ::  Int -> Term (n + 2) -> Term (n + 1)
 proj i (Term x) = Term $ A.proj i x
 
-diag :: (Eq a) => Term (n + 2) a -> Term (n + 1) a
+diag ::  Term (n + 2) -> Term (n + 1)
 diag = undefined
 
 --
-join :: Int -> Term n a -> Term n a -> Term (n + 1) a
+join :: Int -> Term n  -> Term n  -> Term (n + 1)
 join = undefined
 
-instance (PrettyShow a) => PrettyShow (Term n a) where
+instance  PrettyShow (Term n) where
   pshow (Term x) = pshow x
 
 --- Evaluation
--- eval :: (Ord a) => Term n a -> Maybe (Result a)
+-- eval ::  Term n  -> Maybe (Result a)
 -- eval (Term x) = E.eval x
