@@ -3,6 +3,7 @@
 
 module Main where
 
+import PrettyShow
 import Set.Term
 
 -- Example 1:
@@ -43,8 +44,7 @@ exR = (r1 >< compl r2) /\ (compl l1 >< l2)
 -- B(b=1), P(b=1, p=2), S(p=2, u=3, s=4)
 -- Solution : B /\ pi_u,s $ compl $ pi_p $ P >< 1 >< 1 /\ compl (1 >< S)
 
-
-pairs ::  [(Int,Int)] -> Term 2
+pairs :: [(Int, Int)] -> Term 2
 pairs xs = foldl (\/) (empty >< empty) (map finProd xs)
   where
     finProd (x, y) = fin x >< fin y
@@ -54,29 +54,56 @@ triples xs = foldl (\/) (empty >< empty >< empty) (map finProd xs)
   where
     finProd (x, y, z) = fin x >< fin y >< fin z
 
-
 -- --- Sus query: 1 (because -1 rated 10 and 11 the same)
 -- All brands
 susB :: Term 1
-susB = fins [1, 2]
+susB = fins [1, 2, 3]
 
-
+-- Brand 2 and brand 3 _both_ cell 30?
 susP :: Term 2
-susP = pairs [(1,10), (1,11), (2, 20)]
+susP =
+  pairs
+    [ (1, 10)
+    , (1, 11)
+    , (2, 20)
+    , (2, 21)
+    , (2, 22)
+    , (2, 30)
+    , (3, 30)
+    , (3, 31)
+    , (3, 32)
+    ]
 
+--- More compacly represented?
+susP2 :: Term 2
+susP2 = (fin 1 >< fins [10, 11]) \/ (fin 2 >< fins [20, 21, 22]) \/ (fin 3 >< fins [30, 31, 32])
+
+-- Product >< UserID >< review
+-- User -1 hates brand 2. User -2 loves brand 1
 susS :: Term 3
-susS = triples [(10, -1, 0), (11, -1, 0)]
-
+susS =
+  triples
+    [ (20, -1, 0)
+    , (21, -1, 0)
+    , (22, -1, 0)
+    , (30, -1, 0)
+    , (30, -2, 10)
+    , (31, -2, 10)
+    , (32, -2, 10)
+    ]
 
 --- Compute sus query
 -- B, P, S
 sus :: Term 1 -> Term 2 -> Term 3 -> Term 1
-sus b p s = b /\ (proj 2 $ proj 2 $ compl $ proj 2 $ (p >< univ >< univ) /\ (univ >< compl s))
+sus b p s = b /\ (exists 2 $ exists 2 $ forAll 2 $ (p >< univ >< univ) --> (univ >< s))
+
+-- sus b p s = b /\ (proj 2 $ proj 2 $ compl $ proj 2 $ (p >< univ >< univ) /\ (univ >< compl s))
 
 main :: IO ()
 main = do
-  pprint $ susB
+  -- pprint $ compl $ proj 2 $ (susP >< univ >< univ ) /\ (univ >< compl susS)
+  print "----"
   pprint $ susP
-  pprint $ susS
-  pprint $ (susP >< univ >< univ ) /\ (univ >< compl susS)
-  pprint $ sus susB susP susS
+  pprint $ susP2
+  pprint $ sus susB susP2 susS
+  pprint $ sus susB susP susS --- Muuuuuch slower (expectedly)

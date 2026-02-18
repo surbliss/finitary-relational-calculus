@@ -1,25 +1,28 @@
 {-# LANGUAGE GHC2024 #-}
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 
-module Set.Term (
-  Term,
-  fins,
-  cfins,
-  fin,
-  cfin,
-  empty,
-  univ,
-  compl,
-  (/\),
-  (\/),
-  (><),
-  proj,
-  perm,
-  diag,
-  join,
-  pprint,
-)
-where
+module Set.Term where
+
+-- module Set.Term (
+--   Term,
+--   fins,
+--   cfins,
+--   fin,
+--   cfin,
+--   empty,
+--   univ,
+--   compl,
+--   (/\),
+--   (\/),
+--   (><),
+--   (\\),
+--   proj,
+--   perm,
+--   diag,
+--   join,
+--   pprint,
+-- )
+-- where
 
 import PrettyShow
 import Set.Algebra qualified as A
@@ -34,6 +37,7 @@ import GHC.TypeLits
 ---------------------------------------------------
 -- Wrapper with dimension-info, i.e. length of Products
 newtype Term (n :: Nat) = Term (A.Algebra) deriving (Eq, Show)
+
 
 ---------------------------------------------------
 -- Exported constructors
@@ -60,7 +64,7 @@ univ ::  Term 1
 univ = Term $ A.univ 1
 
 compl ::  Term n  -> Term n
-compl (Term x) = Term $ A.compl x
+compl (Term x) = Term $ A.complement x
 
 --- Chose precedence to match the Term-structure:
 infixl 6 \/
@@ -68,13 +72,17 @@ infixl 7 ><
 infixl 8 /\
 
 (/\) ::  Term n  -> Term n  -> Term n
-Term x /\ Term y = Term (x A./\ y)
+Term x /\ Term y = Term (x `A.inter` y)
 
 (><) ::  Term n  -> Term m  -> Term (n + m)
-Term x >< Term y = Term (x A.>< y)
+Term x >< Term y = Term (x `A.prod` y)
 
 (\/) ::  Term n  -> Term n  -> Term n
-Term x \/ Term y = Term (x A.\/ y)
+Term x \/ Term y = Term (x `A.union` y)
+
+--- Term 1 is always base, so safe to take difference
+(\\) :: Term 1 -> Term 1 -> Term 1
+Term x \\ Term y = Term $ x A.\\ y
 
 -- TODO: Permutation, projection and diagonalization
 perm :: [Int] -> Term n  -> Term n
@@ -92,8 +100,22 @@ diag = undefined
 join :: Int -> Term n  -> Term n  -> Term (n + 1)
 join = undefined
 
+--- Extras - aliases to easier read FOL queries
+-- Implies
+(-->) :: Term n -> Term n -> Term n
+x --> y = compl x \/ y
+
+exists :: Int -> Term (n + 2) -> Term (n+1)
+exists = proj
+
+forAll :: Int -> Term (n + 2) -> Term (n + 1)
+forAll i x = compl $ exists i $ compl x
+
+
 instance  PrettyShow (Term n) where
   pshow (Term x) = pshow x
+
+
 
 --- Evaluation
 -- eval ::  Term n  -> Maybe (Result a)
