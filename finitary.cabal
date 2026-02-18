@@ -23,6 +23,7 @@ library
     Generic.Term
     PrettyShow
     Set.Algebra
+    Set.Query
     Set.Term
 
 executable run

@@ -14,6 +14,9 @@ repl *ARGS:
 run:
     ghcid --command="ghci -isrc src/main.hs" --run="main" --test-message="" -W -q
 
+run-set:
+    ghcid --command="ghci -isrc src/main-old2.hs" --run="main" --test-message="" -W -q
+
 
 test:
     cabal test

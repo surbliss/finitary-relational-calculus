@@ -24,12 +24,6 @@ data Algebra where
   Union :: Set Algebra -> Algebra
   deriving (Eq, Show, Ord)
 
---- Non-normalized version
-data Query where
-  QBase :: Base -> Query
-  (:><) :: Query -> Query -> Query
-  (:\/) :: Query -> Query -> Query
-
 ---------------------------------------------------
 -- Exported
 ---------------------------------------------------
