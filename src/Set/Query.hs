@@ -4,12 +4,14 @@ module Set.Query
 where
 
 import Data.IntMap (IntMap)
-import Data.IntMap qualified as Map
+
+-- import Data.IntMap qualified as Map
 import Data.IntSet (IntSet)
 import Data.IntSet qualified as IntSet
 import Data.List (intercalate)
 import Data.Set (Set)
-import Data.Set qualified as Set
+
+-- import Data.Set qualified as Set
 import GHC.TypeLits
 
 --- Invariant: With/Without _never_ contain the empty set!

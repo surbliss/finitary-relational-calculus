@@ -18,6 +18,7 @@ library
     tasty-quickcheck,
 
   exposed-modules:
+    Dict.Algebra
     Generic.Algebra
     Generic.Eval
     Generic.Term
@@ -38,18 +39,21 @@ executable run
     ghc-typelits-natnormalise,
 
 test-suite finitary-test
-  hs-source-dirs: test
+  hs-source-dirs: src
   main-is: runtests.hs
   ghc-options: -Wall
   default-language: GHC2024
   type: exitcode-stdio-1.0
   other-modules:
-    Generic.TestAlgebra
-    Generic.TestTerm
-    Set.TestAlgebra
-    Set.TestTerm
+    Dict.Tests
+    Dict.Algebra
 
   build-depends:
+    QuickCheck,
     base,
+    containers,
     finitary,
+    ghc-typelits-natnormalise,
     tasty,
+    tasty-hunit,
+    tasty-quickcheck,
