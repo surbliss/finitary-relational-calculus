@@ -23,3 +23,7 @@ test:
 
 watch:
     watchexec -e hs cabal test
+
+# Edit cabal project file
+cabal:
+    hx finitary.cabal

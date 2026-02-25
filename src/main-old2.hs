@@ -103,8 +103,8 @@ main :: IO ()
 main = do
   -- pprint $ compl $ proj 2 $ (susP >< univ >< univ ) /\ (univ >< compl susS)
   print "----"
-  pprint $ susP
+  pprint $ forAll 2 $ (susP2 >< univ >< univ) --> (univ >< susS)
   pprint $ susP2
   pprint $ sus susB susP2 susS
   pprint $ sus susB susP2 susS
-  pprint $ sus susB susP susS --- Muuuuuch slower (expectedly)
+  -- pprint $ sus susB susP susS --- Muuuuuch slower (expectedly)

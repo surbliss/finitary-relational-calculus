@@ -45,8 +45,8 @@ test-suite finitary-test
   default-language: GHC2024
   type: exitcode-stdio-1.0
   other-modules:
-    Dict.Tests
     Dict.Algebra
+    Dict.Tests
 
   build-depends:
     QuickCheck,
