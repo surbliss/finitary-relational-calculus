@@ -1,8 +1,5 @@
 module PrettyShow where
 
-import Data.List (intercalate)
-import Data.Set (Set)
-
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
 

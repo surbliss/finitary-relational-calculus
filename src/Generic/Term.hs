@@ -11,7 +11,7 @@ module Generic.Term (
   (/\),
   (\/),
   (><),
-  perm,
+  -- perm,
   proj,
   diag,
   -- join,
@@ -67,8 +67,8 @@ Term x >< Term y = Term (x A.>< y)
 Term x \/ Term y = Term (x A.\/ y)
 
 -- TODO: Permutation, projection and diagonalization
-perm :: [Int] -> Term n a -> Term n a
-perm is (Term x) = Term $ A.perm is x
+-- perm :: [Int] -> Term n a -> Term n a
+-- perm is (Term x) = Term $ A.perm is x
 
 -- If result is type Term 0 a, then it should always be the empty set
 -- Also remember to rerun \/, so terms can be normalized

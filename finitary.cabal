@@ -4,9 +4,13 @@ license: MIT
 version: 1.0.0.0
 build-type: Simple
 
-library
+common common
   hs-source-dirs: src
-  ghc-options: -Wall
+  ghc-options:
+    -Wall
+    -fplugin
+    GHC.TypeLits.Normalise
+
   default-language: GHC2024
   default-extensions: OverloadedStrings
   mixins:
@@ -15,11 +19,16 @@ library
     relude,
 
   build-depends:
-    QuickCheck,
     base,
-    containers,
     ghc-typelits-natnormalise,
     relude,
+
+library
+  import: common
+  build-depends:
+    QuickCheck,
+    containers,
+    lattices,
     tasty,
     tasty-hunit,
     tasty-quickcheck,
@@ -35,19 +44,14 @@ library
     Set.Term
 
 executable run
-  hs-source-dirs: src
+  import: common
   main-is: main.hs
-  ghc-options: -Wall
-  default-language: GHC2024
   build-depends:
-    finitary,
-    ghc-typelits-natnormalise,
+    finitary
 
 test-suite finitary-test
-  hs-source-dirs: src
+  import: common
   main-is: runtests.hs
-  ghc-options: -Wall
-  default-language: GHC2024
   type: exitcode-stdio-1.0
   other-modules:
     Dict.Algebra
@@ -55,8 +59,9 @@ test-suite finitary-test
 
   build-depends:
     QuickCheck,
+    containers,
     finitary,
-    ghc-typelits-natnormalise,
+    lattices,
     tasty,
     tasty-hunit,
     tasty-quickcheck,

@@ -1,5 +1,7 @@
 module Dict.Tests where
 
+import Algebra.Lattice
+import Algebra.Lattice.Lifted
 import Data.IntMap qualified as IntMap
 import Dict.Algebra
 import PrettyShow
@@ -66,8 +68,8 @@ prop_prodAddDepths x y = (depth x + depth y) === depth (x >< y)
 
 prop_dimElemsWildEq :: Relation -> Bool
 prop_dimElemsWildEq Univ = True
-prop_dimElemsWildEq (R (xs, Empty)) = IntMap.null xs
-prop_dimElemsWildEq (R (xs, W w)) = all prop_dimElemsWildEq xs || prop_dimElemsWildEq w || allEqual ((depthsAll `concatMap` IntMap.elems xs) ++ (depthsAll w))
+prop_dimElemsWildEq (R Bottom xs) = IntMap.null xs
+prop_dimElemsWildEq (R (Lift w) xs) = all prop_dimElemsWildEq xs || prop_dimElemsWildEq w || allEqual ((depthsAll `concatMap` IntMap.elems xs) ++ (depthsAll w))
 
 --- Complements
 prop_20 :: Relation -> Property

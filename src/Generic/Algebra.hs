@@ -14,7 +14,7 @@ module Generic.Algebra (
   pprint,
   empty1,
   univ1,
-  perm,
+  -- perm,
   proj,
   diag,
   eq,
@@ -165,8 +165,8 @@ instance InternalAlgebra Union where
       Times ps = xs Unsafe.!! 0
 
 --- Relational algegra-functions
-perm :: [Int] -> Union a -> Union a
-perm = undefined
+-- perm :: [Int] -> Union a -> Union a
+-- perm = undefined
 
 --- First arg: Coordinate of removed val
 proj :: (Ord a) => Int -> Union a -> Union a

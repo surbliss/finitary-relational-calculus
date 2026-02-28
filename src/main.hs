@@ -53,13 +53,13 @@ susS =
 main :: IO ()
 main = do
   -- pprint $ compl $ proj 2 $ (susP >< univ >< univ ) /\ (univ >< compl susS)
-  print "----"
+  putStrLn "----"
   -- print $ member (1, 3) $ susB :/\ susP --> susS
   -- print $ susP
   print $ (2, 21) `member` susS
   print susS
   print $ simp $ (proj 4 $ C $ proj 2 $ susP --> susS)
-  print "---"
+  putStrLn "---"
   let sus = susB :/\ (proj 3 $ proj 4 $ C $ proj 2 $ susP --> susS)
   print sus
   print $ member (1, 3) $ susB :/\ (proj 3 $ proj 4 $ C $ proj 2 $ susP --> susS)

@@ -1,11 +1,8 @@
-{-# LANGUAGE GHC2024 #-}
-
 module Set.Algebra
 where
 
 import Control.Exception (assert)
 import Data.IntSet qualified as IntSet
-import Data.List (intercalate)
 
 -- import Data.List.NonEmpty (NonEmpty ((:|)), (<|))
 import Data.List.NonEmpty qualified as NE
