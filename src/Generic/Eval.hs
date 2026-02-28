@@ -34,19 +34,19 @@ instance Evaluateable Finitary where
   eval (Cofinite x) = Just $ Without $ Set.singleton [x]
 
 instance Evaluateable Intersection where
-  eval (Intersection xs) = foldl interRes resUniv <$> traverse eval xs
+  eval (Intersection xs) = foldr interRes resUniv <$> traverse eval xs
 
 -- Without 2 x without 3 contains 1,2 1,3
 -- Note: If _any_ of the products eval to 'Without', and none of them eval to
 -- 'With empty', then the result is not finitary.
-instance Evaluateable Product where
-  eval (Product (x :| [])) = eval x
-  eval (Product xs) = do
+instance Evaluateable Times where
+  eval (Times (x :| [])) = eval x
+  eval (Times xs) = do
     y :| ys <- traverse eval xs
     foldM prodRes y ys
 
 instance Evaluateable Union where
-  eval (Union xs) = foldl unionRes resEmpty <$> traverse eval xs
+  eval (Union xs) = foldr unionRes resEmpty <$> traverse eval xs
 
 complRes :: Result a -> Result a
 complRes (With x) = Without x

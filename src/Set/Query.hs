@@ -3,16 +3,9 @@
 module Set.Query
 where
 
-import Data.IntMap (IntMap)
+import Text.Show qualified
 
--- import Data.IntMap qualified as Map
-import Data.IntSet (IntSet)
 import Data.IntSet qualified as IntSet
-import Data.List (intercalate)
-import Data.Set (Set)
-
--- import Data.Set qualified as Set
-import GHC.TypeLits
 
 --- Invariant: With/Without _never_ contain the empty set!
 data Base = With IntSet | Without IntSet deriving (Eq, Ord)
@@ -88,18 +81,21 @@ x --> y = C x :\/ y
 
 inter :: [Query] -> Query
 inter [] = C Empty
-inter (x : xs) = foldl (:/\) x xs
+inter (x : xs) = foldr (:/\) x xs
 
 -- First arg: Base dim, increment for the rest. Only for repl testing
 pairs :: Dim -> [(Val, Val)] -> Query
 pairs _ [] = error "Empty pairs"
-pairs n xs = foldl1 (:\/) dims
+pairs n xs = foldr (:\/) d1 dims
   where
+    d1 = case dims of
+      [] -> error "oh no"
+      d : _ -> d
     dims = map (\(x, y) -> fin (n, x) :/\ fin (n + 1, y)) xs
 
 union :: [Query] -> Query
 union [] = Empty
-union (x : xs) = foldl (:\/) x xs
+union (x : xs) = foldr (:\/) x xs
 
 -- Tracks the dimension of the query
 -- Pi :: Query (n + 2) -> Query (n + 1)

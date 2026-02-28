@@ -7,12 +7,12 @@ Not to be exported directly, but to be used internally only
 module Generic.Algebra (
   Finitary (..),
   Intersection (..),
-  Product (..),
+  Times (..),
   Union (..),
   InternalAlgebra (..),
   PrettyShow (..),
   pprint,
-  empty,
+  empty1,
   univ1,
   perm,
   proj,
@@ -21,33 +21,35 @@ module Generic.Algebra (
   opp,
 ) where
 
-import Data.List (intercalate, nub, tails)
-import Data.List.NonEmpty (NonEmpty ((:|)), nonEmpty, toList)
-import Data.List.NonEmpty qualified as NE
+import Relude.Unsafe qualified as Unsafe
 
-data Finitary a = Finite a | Cofinite a deriving (Eq, Show, Functor)
+-- import Data.List (intercalate, nub, tails)
+-- import Data.List.NonEmpty (NonEmpty ((:|)), nonEmpty, toList)
+-- import Data.List.NonEmpty qualified as NE
 
-newtype Intersection a = Intersection [Finitary a] deriving (Eq, Show, Functor)
+data Finitary a = Finite a | Cofinite a deriving (Eq, Ord, Show, Functor)
 
-newtype Product a = Product (NonEmpty (Intersection a)) deriving (Eq, Show, Functor)
-newtype Union a = Union [Product a] deriving (Eq, Show, Functor)
+newtype Intersection a = Intersection [Finitary a] deriving (Eq, Ord, Show, Functor)
 
-empty :: Union a
-empty = Union []
+newtype Times a = Times (NonEmpty (Intersection a)) deriving (Eq, Ord, Show, Functor)
+newtype Union a = Union [Times a] deriving (Eq, Ord, Show, Functor)
+
+empty1 :: Union a
+empty1 = Union []
 
 --- 1-dimensional U
-univ1 :: (Eq a) => Union a
+univ1 :: (Ord a) => Union a
 univ1 = single $ Intersection []
 
 --- Internal computations
 -- NOT to be exported, helper-functions for internal algebra-calculations
 class InternalAlgebra t where
   -- Each type is responsible for one of these, the rest propagates:
-  single :: (Eq a) => t a -> Union a
-  compl' :: (Eq a) => t a -> Union a -- Finitary
-  (/\) :: (Eq a) => t a -> t a -> Union a -- Intersection
-  (><) :: (Eq a) => t a -> t a -> Union a -- Product
-  (\/) :: (Eq a) => t a -> t a -> Union a -- Union
+  single :: (Ord a) => t a -> Union a
+  compl' :: (Ord a) => t a -> Union a -- Finitary
+  (/\) :: (Ord a) => t a -> t a -> Union a -- Intersection
+  (><) :: (Ord a) => t a -> t a -> Union a -- Times
+  (\/) :: (Ord a) => t a -> t a -> Union a -- Union
 
 eq :: (Eq a) => Finitary a -> Finitary a -> Bool
 Finite x `eq` Finite y = x == y
@@ -66,7 +68,7 @@ instance InternalAlgebra Finitary where
   compl' (Cofinite x) = single $ Finite x
 
   x /\ y | x `eq` y = single x
-  x /\ y | x `opp` y = empty
+  x /\ y | x `opp` y = empty1
   x /\ y = single x /\ single y
   x >< y = single x >< single y
   x \/ y | x `eq` y = single x
@@ -74,45 +76,45 @@ instance InternalAlgebra Finitary where
   x \/ y = single x \/ single y
 
 instance InternalAlgebra Intersection where
-  single x = single $ Product $ x :| []
+  single x = single $ Times $ x :| []
 
   -- Intersection should handle Univ-rules
-  compl' (Intersection []) = empty
+  compl' (Intersection []) = empty1
   -- (21), i.e. DeMorgan
   compl' (Intersection (x : xs)) = compl' x \/ compl' (Intersection xs)
 
   -- Note that xs/ys = [] acts asunivUnion here!
 
-  Intersection xs /\ Intersection ys | True `elem` isOp = empty
+  Intersection xs /\ Intersection ys | True `elem` isOp = empty1
     where
       isOp = [x `opp` y | (x : zs) <- tails (xs <> ys), y <- zs]
-  Intersection xs /\ Intersection ys = single $ Intersection $ nub $ xs <> ys
+  Intersection xs /\ Intersection ys = single $ Intersection $ ordNub $ xs <> ys
 
-  x >< y = single $ Product $ x :| [y]
+  x >< y = single $ Times $ x :| [y]
 
   Intersection [] \/ _ = univ1
   _ \/ Intersection [] = univ1
   x \/ y = single x \/ single y
 
-instance InternalAlgebra Product where
+instance InternalAlgebra Times where
   single x = Union [x]
 
   -- (22)
-  compl' (Product (x :| [])) = compl' x
-  compl' (Product (x :| (y : ys))) =
+  compl' (Times (x :| [])) = compl' x
+  compl' (Times (x :| (y : ys))) =
     (compl' x >< univs)
-      \/ (univ1 >< compl' (Product (y :| ys)))
+      \/ (univ1 >< compl' (Times (y :| ys)))
     where
-      univs = single $ Product $ NE.map (const $ Intersection []) $ y :| ys
+      univs = single $ Times $ (const $ Intersection []) <$> y :| ys
 
   -- (30)
-  Product (x :| xs) /\ Product (y :| ys) = case (nonEmpty xs, nonEmpty ys) of
+  Times (x :| xs) /\ Times (y :| ys) = case (nonEmpty xs, nonEmpty ys) of
     (Nothing, Nothing) -> x /\ y
-    (Just xs', Just ys') -> (x /\ y) >< (Product xs' /\ Product ys')
+    (Just xs', Just ys') -> (x /\ y) >< (Times xs' /\ Times ys')
     (Nothing, Just _) -> error "Right product longer than left in intersection"
     (Just _, Nothing) -> error "Left product longer than right in intersection"
 
-  Product xs >< Product ys = single $ Product (xs <> ys)
+  Times xs >< Times ys = single $ Times (xs <> ys)
 
   x \/ y = single x \/ single y
 
@@ -124,10 +126,10 @@ instance InternalAlgebra Union where
   compl' (Union [x]) = compl' x
   compl' (Union (x : xs)) = compl' x /\ compl' (Union xs)
 
-  Union [] /\ _ = empty
-  _ /\ Union [] = empty
+  Union [] /\ _ = empty1
+  _ /\ Union [] = empty1
   -- (28)-(29)
-  Union [x] /\ Union ys = foldl (\/) empty xIntersections
+  Union [x] /\ Union ys = foldr (\/) empty1 xIntersections
     where
       xIntersections = map (x /\) ys
   Union (x : xs) /\ Union ys = (single x /\ Union ys) \/ (Union xs /\ Union ys)
@@ -140,8 +142,8 @@ instance InternalAlgebra Union where
   --     \/ (Union xs /\ Union ys)
 
   -- (31)-(32) + emptyUnion products
-  Union [] >< _ = empty
-  _ >< Union [] = empty
+  Union [] >< _ = empty1
+  _ >< Union [] = empty1
   Union (x : xs) >< Union (y : ys) =
     (x >< y)
       \/ (Union [x] >< Union ys)
@@ -155,45 +157,45 @@ instance InternalAlgebra Union where
   -- WRONG: Should not filter univs, should turn everything _into_ univ!
   Union xs \/ Union ys
     | hasUnivs = univs
-    | otherwise = Union $ nub $ xs <> ys
+    | otherwise = Union $ ordNub $ xs <> ys
     where
       hasUnivs = any isUniv xs || any isUniv ys
-      isUniv (Product zs) = all (\(Intersection is) -> null is) zs
-      univs = single $ Product $ NE.map (const $ Intersection []) $ ps
-      Product ps = xs !! 0
+      isUniv (Times zs) = all (\(Intersection is) -> null is) zs
+      univs = single $ Times $ (const $ Intersection []) <$> ps
+      Times ps = xs Unsafe.!! 0
 
 --- Relational algegra-functions
 perm :: [Int] -> Union a -> Union a
 perm = undefined
 
 --- First arg: Coordinate of removed val
-proj :: (Eq a) => Int -> Union a -> Union a
+proj :: (Ord a) => Int -> Union a -> Union a
 -- Empty union.
 -- NOTE: Maybe proj on Ø should be an error instead? Hm
 proj i _ | i < 1 = error "Projection index under 1"
-proj _ (Union []) = empty
+proj _ (Union []) = empty1
 -- First product has dim 1, so all products have dim 1, so projection is empty
-proj _ (Union (Product (_ :| []) : _)) = error "One-dim product not allowed"
+proj _ (Union (Times (_ :| []) : _)) = error "One-dim product not allowed"
 -- By invariant that dims of xs are constant, _all_ dims are > 1 here.
-proj i (Union xs) = foldl (\/) empty (map (projProd i) xs)
+proj i (Union xs) = foldr (\/) empty1 (map (projProd i) xs)
 
-projProd :: (Eq a) => Int -> Product a -> Union a
+projProd :: (Ord a) => Int -> Times a -> Union a
 projProd i _ | i < 1 = error "projProd on index < 1"
-projProd 2 (Product (_ :| [])) = error "projProd index too large for list"
-projProd 2 (Product (x :| _ : ys)) = single $ Product $ x :| ys
-projProd _ (Product (_ :| [])) = error "Projuction-index too large for projProd"
-projProd 1 (Product (_ :| y : ys)) = single $ Product $ y :| ys
-projProd i (Product (x :| y : ys)) = single x >< projProd (i - 1) (Product $ y :| ys)
+projProd 2 (Times (_ :| [])) = error "projProd index too large for list"
+projProd 2 (Times (x :| _ : ys)) = single $ Times $ x :| ys
+projProd _ (Times (_ :| [])) = error "Projuction-index too large for projProd"
+projProd 1 (Times (_ :| y : ys)) = single $ Times $ y :| ys
+projProd i (Times (x :| y : ys)) = single x >< projProd (i - 1) (Times $ y :| ys)
 
-diag :: (Eq a) => Union a -> Union a
+diag :: (Ord a) => Union a -> Union a
 diag (Union []) = Union []
-diag (Union xs) = foldl (\/) empty (map diagProd xs)
+diag (Union xs) = foldr (\/) empty1 (map diagProd xs)
 
 -- TODO: Normalize, to remove potential 'univs'
-diagProd :: (Eq a) => Product a -> Union a
-diagProd (Product (_ :| [])) = error "Term-constructor should prevent diag on dim=1"
-diagProd (Product (Intersection xs :| Intersection ys : zs)) =
-  single $ Product (Intersection (xs <> ys) :| zs)
+diagProd :: (Ord a) => Times a -> Union a
+diagProd (Times (_ :| [])) = error "Term-constructor should prevent diag on dim=1"
+diagProd (Times (Intersection xs :| Intersection ys : zs)) =
+  single $ Times (Intersection (xs <> ys) :| zs)
 
 ---------------------------------------------------
 
@@ -223,9 +225,9 @@ instance (PrettyShow a) => PrettyShow (Intersection a) where
   pshow (Intersection [x]) = pshow x
   pshow (Intersection xs) = withOp "∩" xs
 
-instance (PrettyShow a) => PrettyShow (Product a) where
-  pshow (Product (x :| [])) = pshow x
-  pshow (Product xs) = withParens $ withOp " × " (toList xs)
+instance (PrettyShow a) => PrettyShow (Times a) where
+  pshow (Times (x :| [])) = pshow x
+  pshow (Times xs) = withParens $ withOp " × " (toList xs)
 
 instance (PrettyShow a) => PrettyShow (Union a) where
   pshow (Union []) = "∅"

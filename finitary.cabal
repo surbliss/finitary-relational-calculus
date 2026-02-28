@@ -8,11 +8,18 @@ library
   hs-source-dirs: src
   ghc-options: -Wall
   default-language: GHC2024
+  default-extensions: OverloadedStrings
+  mixins:
+    base hiding (Prelude),
+    relude (Relude as Prelude),
+    relude,
+
   build-depends:
     QuickCheck,
     base,
     containers,
     ghc-typelits-natnormalise,
+    relude,
     tasty,
     tasty-hunit,
     tasty-quickcheck,
@@ -33,8 +40,6 @@ executable run
   ghc-options: -Wall
   default-language: GHC2024
   build-depends:
-    base,
-    containers,
     finitary,
     ghc-typelits-natnormalise,
 
@@ -50,8 +55,6 @@ test-suite finitary-test
 
   build-depends:
     QuickCheck,
-    base,
-    containers,
     finitary,
     ghc-typelits-natnormalise,
     tasty,

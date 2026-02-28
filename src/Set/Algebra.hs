@@ -6,13 +6,15 @@ where
 import Control.Exception (assert)
 import Data.IntSet qualified as IntSet
 import Data.List (intercalate)
-import Data.List.NonEmpty (NonEmpty ((:|)), (<|))
+
+-- import Data.List.NonEmpty (NonEmpty ((:|)), (<|))
 import Data.List.NonEmpty qualified as NE
-import Data.Set (Set)
+
+-- import Data.Set (Set)
 import Data.Set qualified as Set
 import PrettyShow
 
-type IntSet = IntSet.IntSet
+-- type IntSet = IntSet.IntSet
 
 --- Invariant to be maintained: IntSet is _never_ empty!
 data Base = Empty | Univ | With IntSet | Without IntSet deriving (Eq, Show, Ord)
@@ -20,7 +22,7 @@ data Base = Empty | Univ | With IntSet | Without IntSet deriving (Eq, Show, Ord)
 data Algebra where
   Base :: Base -> Algebra
   --- Always dim >= 2
-  Product :: NonEmpty Algebra -> Algebra
+  Times :: NonEmpty Algebra -> Algebra
   Union :: Set Algebra -> Algebra
   deriving (Eq, Show, Ord)
 
@@ -42,60 +44,60 @@ complement = simplify . compl
 
 --- Used by the exporteds
 simplify :: Algebra -> Algebra
-simplify s | isEmpty s = empty $ dim s
+simplify s | isEmpty s = emptyA $ dim s
 simplify s | isUniv s = univ $ dim s
 simplify u@(Union xs) =
   let res = Set.filter (not . isEmpty) xs
-   in if Set.null res then empty (dim u) else Union res
+   in if Set.null res then emptyA (dim u) else Union res
 simplify s = s
 
 --- Later: Use for asserts/tests
 isSimple :: Algebra -> Bool
 isSimple (Base Empty) = True
 isSimple (Base Univ) = True
-isSimple (Base (With x)) = nonEmpty x
-isSimple (Base (Without x)) = nonEmpty x
-isSimple (Product xs) = all isBase xs || all isSimple xs || all (not . isEmpty) xs
-isSimple u@(Union xs) = all isProduct xs || all (== dim u) (Set.map dim xs) || all (not . isEmpty) xs || all (not . isUniv) xs
+isSimple (Base (With x)) = isNonEmpty x
+isSimple (Base (Without x)) = isNonEmpty x
+isSimple (Times xs) = all isBase xs || all isSimple xs || all (not . isEmpty) xs
+isSimple u@(Union xs) = all isTimes xs || all (== dim u) (Set.map dim xs) || all (not . isEmpty) xs || all (not . isUniv) xs
   where
-    isProduct (Product _) = True
-    isProduct _ = False
+    isTimes (Times _) = True
+    isTimes _ = False
 
 debugShow :: Algebra -> String
 debugShow (Base Empty) = "Ø"
 debugShow (Base Univ) = "𝕌"
 debugShow (Base (With _)) = "F"
 debugShow (Base (Without _)) = "C"
-debugShow (Product xs) = "(P:" ++ show (debugShow <$> xs) ++ ")"
+debugShow (Times xs) = "(P:" ++ show (debugShow <$> xs) ++ ")"
 debugShow (Union xs) = "(U:" ++ show (debugShow `Set.map` xs) ++ ")"
 
 ---------------------------------------------------
 -- ASSERTIONS: These are for assertions that data structure is represented correctly.
 ---------------------------------------------------
 -- Can be removed, once this is tested thoroughly
--- This asserts that the current form is a normal form. That is, Base < Complement < Product < Union
+-- This asserts that the current form is a normal form. That is, Base < Complement < Times < Union
 -- At some point, it might make sense to move 'Complement' up
 
 dim :: Algebra -> Int
 dim (Base _) = 1
-dim (Product xs) = length xs
+dim (Times xs) = length xs
 dim (Union xs) = dim (Set.elemAt 0 xs) --- If simplified properly, will never be a null set
 
 isBase :: Algebra -> Bool
 isBase (Base _) = True
 isBase _ = False
 
-isValidProduct :: Algebra -> Bool
-isValidProduct (Product xs) = all isBase xs
-isValidProduct _ = False
+isValidTimes :: Algebra -> Bool
+isValidTimes (Times xs) = all isBase xs
+isValidTimes _ = False
 
 isValidUnion :: Algebra -> Bool
 isValidUnion s@(Union xs) =
-  (dim s == 1 && all isBase xs) || (dim s > 1 && all isValidProduct xs)
+  (dim s == 1 && all isBase xs) || (dim s > 1 && all isValidTimes xs)
 isValidUnion _ = False
 
 isValid :: Algebra -> Bool
-isValid x = isBase x || isValidProduct x || isValidUnion x
+isValid x = isBase x || isValidTimes x || isValidUnion x
 
 ---------------------------------------------------
 -- Assertion stuff done
@@ -105,49 +107,49 @@ fins :: [Int] -> Algebra
 fins [] = Base $ Empty
 fins xs = Base $ With $ IntSet.fromList xs
 
-empty :: Int -> Algebra
-empty n | n < 1 = error "Non-positive univ"
-empty 1 = Base Empty
-empty n = Product (NE.fromList (replicate n (Base Empty)))
+emptyA :: Int -> Algebra
+emptyA n | n < 1 = error "Non-positive univ"
+emptyA 1 = Base Empty
+emptyA n = Times (NE.fromList (replicate n (Base Empty)))
 
 univ :: Int -> Algebra
 univ n | n < 1 = error "Non-positive univ"
 univ 1 = Base Univ
-univ n = Product (NE.fromList (replicate n (Base Univ)))
+univ n = Times (NE.fromList (replicate n (Base Univ)))
 
 isEmpty :: Algebra -> Bool
 isEmpty s = case s of
   Base Empty -> True
   Base _ -> False
-  Product xs -> any isEmpty xs
+  Times xs -> any isEmpty xs
   Union xs -> all isEmpty xs
 
 isUniv :: Algebra -> Bool
 isUniv s = case s of
   Base Univ -> True
   Base _ -> False
-  Product xs -> all isUniv xs
+  Times xs -> all isUniv xs
   Union xs -> any isUniv xs
 
 --- All the below should return unions! So the types are consistent
 --- Actually, nvm, lets try without! Just simplify as much as possible
 
-nonEmpty :: IntSet -> Bool
-nonEmpty s = not $ IntSet.null s
+isNonEmpty :: IntSet -> Bool
+isNonEmpty s = not $ IntSet.null s
 
 baseCompl :: Base -> Base
 baseCompl Empty = Univ
 baseCompl Univ = Empty
-baseCompl (With x) = assert (nonEmpty x) $ Without x
-baseCompl (Without x) = assert (nonEmpty x) $ With x
+baseCompl (With x) = assert (isNonEmpty x) $ Without x
+baseCompl (Without x) = assert (isNonEmpty x) $ With x
 
 compl :: Algebra -> Algebra
 compl s = case s of
   Base x -> Base $ baseCompl x
-  Product (x :| []) -> compl x
-  Product (x :| x' : xs) -> (compl x >< univ (1 + length xs)) \/ (univ 1 >< compl rest)
+  Times (x :| []) -> compl x
+  Times (x :| x' : xs) -> (compl x >< univ (1 + length xs)) \/ (univ 1 >< compl rest)
     where
-      rest = Product (x' :| xs)
+      rest = Times (x' :| xs)
   Union xs -> Set.foldl (/\) u cs
     where
       cs = Set.map compl xs -- Either a set of base, or set of union of prods
@@ -176,8 +178,8 @@ baseIntersection s s' = normalizeBase $
 (/\) :: Algebra -> Algebra -> Algebra
 s /\ s' =
   assert (dim s == dim s') $ case (s, s') of
-    (_, _) | isEmpty s -> empty $ dim s
-    (_, _) | isEmpty s' -> empty $ dim s'
+    (_, _) | isEmpty s -> emptyA $ dim s
+    (_, _) | isEmpty s' -> emptyA $ dim s'
     (_, _) | isUniv s -> s'
     (_, _) | isUniv s' -> s
     (Base x, Base y) -> Base $ baseIntersection x y
@@ -186,24 +188,24 @@ s /\ s' =
       where
         inters = Set.map (uncurry (/\)) pairs
         pairs = Set.cartesianProduct xs ys
-        emptyProd = empty (dim s)
+        emptyProd = emptyA (dim s)
     (Union xs, y) -> Union $ (/\ y) `Set.map` xs
     -- (Union (x :| []), y) -> x /\ y
-    (Product (x :| []), y) -> x /\ y
+    (Times (x :| []), y) -> x /\ y
     (x, Union ys) -> Union $ (x /\) `Set.map` ys
     -- (x, Union (y :| [])) -> x /\ y
-    (x, Product (y :| [])) -> x /\ y
+    (x, Times (y :| [])) -> x /\ y
     --- Non-trivial Unions
     -- (28)
     -- (x, Union (y :| y' : ys)) -> (x /\ y) \/ (x /\ Union (y' :| ys))
     -- (29)
     -- (Union (x :| x' : xs), y) -> (x /\ y) \/ (Union (x' :| xs) /\ y)
     -- (32)
-    --- Products (Now there are no unions!). Also, the assert makes sure the dimensions are equal, so just error in those cases (Basically, something non-product with something product)
-    (Product (x :| x' : xs), Product (y :| y' : ys)) ->
-      (x /\ y) >< (Product (x' :| xs) /\ Product (y' :| ys))
-    (Base _, Product (_ :| _ : _)) -> error "Base inter dim>2"
-    (Product (_ :| _ : _), Base _) -> error "dim>2 inter base"
+    --- Timess (Now there are no unions!). Also, the assert makes sure the dimensions are equal, so just error in those cases (Basically, something non-product with something product)
+    (Times (x :| x' : xs), Times (y :| y' : ys)) ->
+      (x /\ y) >< (Times (x' :| xs) /\ Times (y' :| ys))
+    (Base _, Times (_ :| _ : _)) -> error "Base inter dim>2"
+    (Times (_ :| _ : _), Base _) -> error "dim>2 inter base"
 
 baseUnion :: Base -> Base -> Base
 baseUnion Empty x = x
@@ -226,40 +228,40 @@ s \/ s' = case (s, s') of
   (_, _) | isUniv s' -> univ (dim s)
   (Base x, Base y) -> Base $ baseUnion x y
   -- Simplify single-products
-  (Product (x :| []), y) -> x \/ y
-  (x, Product (y :| [])) -> x \/ y
+  (Times (x :| []), y) -> x \/ y
+  (x, Times (y :| [])) -> x \/ y
   (Union xs, Union ys) -> Union (xs <> ys)
-  (Union xs, p@(Product _)) -> Union $ Set.insert p xs
-  (p@(Product _), Union xs) -> Union $ Set.insert p xs
+  (Union xs, p@(Times _)) -> Union $ Set.insert p xs
+  (p@(Times _), Union xs) -> Union $ Set.insert p xs
   (Union xs, b@(Base _)) -> Union $ Set.map (\/ b) xs
   (b@(Base _), Union xs) -> Union $ Set.map (b \/) xs
   -- Simplify singletons
   -- (x, Union (y :| [])) -> x \/ y
-  ((Base _), Product (_ :| _ : _)) -> error "Base union dim>2"
-  (Product (_ :| _ : _), (Base _)) -> error "dim>2 union Base"
-  (x@(Product (_ :| _ : _)), y@(Product (_ :| _ : _))) -> Union $ Set.fromList [x, y]
+  ((Base _), Times (_ :| _ : _)) -> error "Base union dim>2"
+  (Times (_ :| _ : _), (Base _)) -> error "dim>2 union Base"
+  (x@(Times (_ :| _ : _)), y@(Times (_ :| _ : _))) -> Union $ Set.fromList [x, y]
 
 (><) :: Algebra -> Algebra -> Algebra
 s >< s' =
   -- trace (debugShow s ++ " >< " ++ debugShow s') $
   case (s, s') of
     --- Simplify if argument empty (Nothing happens if univ)
-    (_, _) | isEmpty s || isEmpty s' -> empty $ dim s + dim s'
+    (_, _) | isEmpty s || isEmpty s' -> emptyA $ dim s + dim s'
     --- Base operations (figure 2)
-    (x@(Base _), y@(Base _)) -> Product (x :| [y])
+    (x@(Base _), y@(Base _)) -> Times (x :| [y])
     --- Singleton simplifications
     (Union xs, Union ys) -> Union $ (\(x, y) -> x >< y) `Set.map` Set.cartesianProduct xs ys
     (Union xs, y@(Base _)) -> Union $ Set.map (>< y) xs
     (x@(Base _), Union ys) -> Union $ Set.map (x ><) ys
-    (Union xs, y@(Product _)) -> Union $ Set.map (>< y) xs
-    (x@(Product _), Union ys) -> Union $ Set.map (x ><) ys
+    (Union xs, y@(Times _)) -> Union $ Set.map (>< y) xs
+    (x@(Times _), Union ys) -> Union $ Set.map (x ><) ys
     --- Non-trivial Unions
     -- (x@(Base _), Union (y :| y' : ys)) -> (x >< y) \/ (x >< Union (y' :| ys))
     -- (32)
-    --- Products (Now there are no unions!)
-    (Product xs@(_ :| _), Product ys@(_ :| _)) -> Product $ xs <> ys
-    (x@(Base _), Product xs@(_ :| _)) -> Product $ x <| xs
-    (Product xs@(_ :| _), x@(Base _)) -> Product $ NE.appendList xs [x]
+    --- Timess (Now there are no unions!)
+    (Times xs@(_ :| _), Times ys@(_ :| _)) -> Times $ xs <> ys
+    (x@(Base _), Times xs@(_ :| _)) -> Times $ one x <> xs
+    (Times xs@(_ :| _), x@(Base _)) -> Times $ NE.appendList xs [x]
 
 ---------------------------------------------------
 -- FOL Query functions
@@ -276,14 +278,14 @@ proj :: Int -> Algebra -> Algebra
 proj i _ | i < 1 = error "non-positive projection"
 proj i s | i > dim s = error "proj on i > dim"
 proj _ (Base _) = error "base dim = 1, should be caught by other check"
-proj 1 (Product (_ :| x : [])) = x
-proj 2 (Product (x :| _ : [])) = x
+proj 1 (Times (_ :| x : [])) = x
+proj 2 (Times (x :| _ : [])) = x
 proj i s = case s of
-  Product xs -> Product (removeIndex i xs)
+  Times xs -> Times (removeIndex i xs)
   Union xs -> Set.foldl (\/) e ps
     where
       ps = Set.map (proj i) xs
-      e = empty (dim s - 1)
+      e = emptyA (dim s - 1)
 
 -- proj i (Union xs) = foldl (\/) empty (map (projProd i) xs)
 
@@ -300,11 +302,11 @@ _ \\ _ = error "Non-base intersection"
 ---------------------------------------------------
 instance PrettyShow (Base) where
   pshow Empty = "∅"
-  pshow (With x) = assert (nonEmpty x) $ pshow x
+  pshow (With x) = assert (isNonEmpty x) $ pshow x
   pshow Univ = "𝕌"
-  pshow (Without x) = assert (nonEmpty x) $ pshow x ++ "ᶜ"
+  pshow (Without x) = assert (isNonEmpty x) $ pshow x ++ "ᶜ"
 
 instance PrettyShow (Algebra) where
   pshow (Base x) = pshow x
-  pshow (Product xs) = withParens $ intercalate " × " (map pshow $ NE.toList xs)
+  pshow (Times xs) = withParens $ intercalate " × " (map pshow $ NE.toList xs)
   pshow (Union xs) = intercalate " ∪ " (map pshow $ Set.toList xs)

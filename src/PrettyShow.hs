@@ -3,11 +3,11 @@ module PrettyShow where
 import Data.List (intercalate)
 import Data.Set (Set)
 
-import Data.IntMap (IntMap)
-import Data.IntMap qualified as IntMap
-import Data.IntSet (IntSet)
+import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
-import Data.Set qualified as Set
+
+-- import Data.IntSet (IntSet)
+-- import Data.Set qualified as Set
 
 class PrettyShow a where
   pshow :: a -> String
@@ -19,7 +19,7 @@ instance PrettyShow Int where
   pshow xs = show xs
 
 instance (PrettyShow a) => PrettyShow (Set a) where
-  pshow xs = "{" ++ intercalate ", " (map pshow (Set.elems xs)) ++ "}"
+  pshow xs = "{" ++ intercalate ", " (map pshow (toList xs)) ++ "}"
 
 instance (PrettyShow a) => PrettyShow (IntMap a) where
   pshow d = "{" ++ strs ++ "}"
@@ -29,7 +29,7 @@ instance (PrettyShow a) => PrettyShow (IntMap a) where
         pure $ show k ++ " -> " ++ pshow v
 
 instance PrettyShow IntSet where
-  pshow xs = "{" ++ intercalate ", " (map pshow (IntSet.elems xs)) ++ "}"
+  pshow xs = "{" ++ intercalate ", " (pshow <$> (IntSet.toList xs)) ++ "}"
 
 instance (PrettyShow a) => PrettyShow [a] where
   pshow xs = "[" ++ intercalate ", " (map pshow xs) ++ "]"

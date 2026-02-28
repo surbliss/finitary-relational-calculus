@@ -5,7 +5,7 @@ module Generic.Term (
   Term,
   finite,
   cofinite,
-  empty,
+  empty1,
   univ,
   complement,
   (/\),
@@ -14,7 +14,7 @@ module Generic.Term (
   perm,
   proj,
   diag,
-  join,
+  -- join,
   eval,
   pprint,
 )
@@ -35,21 +35,21 @@ newtype Term (n :: Nat) a = Term (A.Union a) deriving (Eq, Show, Functor)
 ---------------------------------------------------
 -- Exported constructors
 ---------------------------------------------------
-finite :: (Eq a) => a -> Term 1 a
+finite :: (Ord a) => a -> Term 1 a
 finite x = Term $ A.single $ A.Finite x
 
-cofinite :: (Eq a) => a -> Term 1 a
+cofinite :: (Ord a) => a -> Term 1 a
 cofinite x = Term $ A.single $ A.Cofinite x
 
 -- Need to specify dimension manually
-empty :: Term (n + 1) a
-empty = Term A.empty
+empty1 :: Term (n + 1) a
+empty1 = Term A.empty1
 
 -- Always dim 1, for higher dim do univ >< univ >< ...
-univ :: (Eq a) => Term 1 a
+univ :: (Ord a) => Term 1 a
 univ = Term A.univ1
 
-complement :: (Eq a) => Term n a -> Term n a
+complement :: (Ord a) => Term n a -> Term n a
 complement (Term x) = Term $ A.compl' x
 
 --- Chose precedence to match the Term-structure:
@@ -57,13 +57,13 @@ infixl 6 \/
 infixl 7 ><
 infixl 8 /\
 
-(/\) :: (Eq a) => Term n a -> Term n a -> Term n a
+(/\) :: (Ord a) => Term n a -> Term n a -> Term n a
 Term x /\ Term y = Term (x A./\ y)
 
-(><) :: (Eq a) => Term n a -> Term m a -> Term (n + m) a
+(><) :: (Ord a) => Term n a -> Term m a -> Term (n + m) a
 Term x >< Term y = Term (x A.>< y)
 
-(\/) :: (Eq a) => Term n a -> Term n a -> Term n a
+(\/) :: (Ord a) => Term n a -> Term n a -> Term n a
 Term x \/ Term y = Term (x A.\/ y)
 
 -- TODO: Permutation, projection and diagonalization
@@ -72,15 +72,15 @@ perm is (Term x) = Term $ A.perm is x
 
 -- If result is type Term 0 a, then it should always be the empty set
 -- Also remember to rerun \/, so terms can be normalized
-proj :: (Eq a) => Int -> Term (n + 2) a -> Term (n + 1) a
+proj :: (Ord a) => Int -> Term (n + 2) a -> Term (n + 1) a
 proj i (Term x) = Term $ A.proj i x
 
-diag :: (Eq a) => Term (n + 2) a -> Term (n + 1) a
+diag :: (Ord a) => Term (n + 2) a -> Term (n + 1) a
 diag (Term x) = Term $ A.diag x
 
 --
-join :: Int -> Term n a -> Term n a -> Term (n + 1) a
-join = undefined
+-- join :: Int -> Term n a -> Term n a -> Term (n + 1) a
+-- join = undefined
 
 pprint :: (A.PrettyShow a) => Term n a -> IO ()
 pprint (Term x) = A.pprint x
