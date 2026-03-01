@@ -11,11 +11,9 @@ import Control.Exception (assert)
 import Text.Show qualified
 
 import Data.IntMap.Strict qualified as IntMap
-import GHC.TypeLits
 
 import PrettyShow
 import Test.QuickCheck hiding ((><))
-import Text.Show qualified
 
 default (Int)
 
@@ -44,9 +42,13 @@ x `symDiff` y = (x IntMap.\\ y) <> (y IntMap.\\ x)
 symDiffLatt :: (Heyting a) => a -> a -> a
 x `symDiffLatt` y = (neg x /\ y) \/ (x /\ neg y)
 
-interWild :: (Lattice b) => IntMap b -> Lifted b -> IntMap b
+interWild :: (Lattice b) => Dropped (IntMap b) -> Lifted b -> Dropped (IntMap b)
 interWild _ Bottom = bottom
-interWild xs (Lift w) = IntMap.map (/\ w) xs
+interWild Top (Lift _) = bug "Wildcard deeper than branches"
+interWild (Drop xs) (Lift w) = Drop $ (IntMap.map (/\ w) xs)
+
+sym :: (Heyting a) => a -> a -> a
+x `sym` y = (x \\ y) \/ (y \\ x)
 
 interDiff :: (Heyting b) => IntMap b -> Lifted b -> IntMap b
 interDiff _ Bottom = bottom
@@ -55,53 +57,63 @@ instance Lattice (Relation) where
   R {wild = v, branches = xs, dim = n} /\ R {wild = w, branches = ys, dim = m} =
     R
       { wild = (v /\ w)
-      , branches = (xs /\ ys) `symDiff` (xs `interWild` w) `symDiff` (ys `interWild` v)
+      , branches = (xs /\ ys) `sym` (xs `interWild` w) `sym` (ys `interWild` v)
       , dim = assert (n == m) n
       }
 
-  R {wild = v, branches = xs, dim = nx} \/ R {wild = w, branches = ys, dim = ny} =
-    R {wild = wildUnion, branches = elemUnionv, dim = nx}
-    where
-      -- x@(R {}) \/ y@(R {}) = case (wild x, wild y) of
-      --   (Bottom, Bottom) -> R {branches = branches x \/ branches ys}
-      --   (Lift v, Bottom) -> R ()
-      -- R {wild = Bottom, branches = xs} \/ R {wild = Bottom, branches = ys} = R {wild = Bottom, branches = (xs \/ ys)}
-      -- R (Lift v) xs \/ R Bottom ys = R (Lift v) (interDiff xs (Lift v) \/ ys)
-      -- R Bottom xs \/ R (Lift w) ys = R (Lift w) (xs \/ interDiff ys (Lift w))
-      -- R v xs \/ R w ys = R wildUnion elemUnion -- FIX: Not correct yet
+  x \/ y = undefined
 
-      wildUnion = v \/ w
-      xs' = interDiff xs wildUnion
-      ys' = interDiff ys wildUnion
-      elemUnion = xs' \/ ys'
+-- R {wild = v, branches = xs, dim = nx} \/ R {wild = w, branches = ys, dim = ny} =
+--   R {wild = wildUnion, branches = elemUnionv, dim = nx}
+--   where
+--     -- x@(R {}) \/ y@(R {}) = case (wild x, wild y) of
+--     --   (Bottom, Bottom) -> R {branches = branches x \/ branches ys}
+--     --   (Lift v, Bottom) -> R ()
+--     -- R {wild = Bottom, branches = xs} \/ R {wild = Bottom, branches = ys} = R {wild = Bottom, branches = (xs \/ ys)}
+--     -- R (Lift v) xs \/ R Bottom ys = R (Lift v) (interDiff xs (Lift v) \/ ys)
+--     -- R Bottom xs \/ R (Lift w) ys = R (Lift w) (xs \/ interDiff ys (Lift w))
+--     -- R v xs \/ R w ys = R wildUnion elemUnion -- FIX: Not correct yet
 
--- where
---   elemUnion = xs `symDiff` ys `symDiff` (xs /\ ys)
---   wildUnion = v `symDiffLatt` w `symDiffLatt` (v /\ w)
+--     wildUnion = v \/ w
+--     xs' = interDiff xs wildUnion
+--     ys' = interDiff ys wildUnion
+--     elemUnion = xs' \/ ys'
+
+instance BoundedMeetSemiLattice (Branches) where
+  top = Top
+
+instance BoundedJoinSemiLattice (Branches) where
+  bottom = Drop (bottom)
+
+instance BoundedMeetSemiLattice (Wild) where
+  top = Lift top
+
+instance BoundedJoinSemiLattice (Wild) where
+  bottom = Bottom
 
 instance BoundedJoinSemiLattice (Relation) where
-  bottom = R {branches = bottom, wild = bottom, dim = 0}
+  bottom = R {branches = bottom, wild = Bottom, dim = 0}
 
 instance BoundedMeetSemiLattice (Relation) where
-  top = R {branches = top, wild = top, dim = 0}
+  top = R {branches = top, wild = Bottom, dim = 0}
 
-instance Heyting (Relation) where
+instance Heyting Branches where
   x ==> y = neg x \/ y
-  neg R {branches = Top, wild = Bottom, dim = n} = R {branches = bottom, wild = Bottom, dim = n}
-  neg (x@R {}) = x {wild = neg (wild x)}
+  neg Top = bottom
+  neg (Drop xs) = Drop $ neg <$> xs
 
 instance Heyting (Wild) where
   x ==> y = neg x \/ y
   neg Bottom = top
   neg (Lift x) = case neg x of
+    R {wild = Bottom, branches = Top} -> top
     R {wild = Bottom, branches = xs} | null xs -> bottom
     y -> Lift y
 
--- Tmp repl stuff
-uuu :: (Relation)
-uuu = finite [1, 2, 3]
-vvv :: (Relation)
-vvv = cofinite [2, 3, 4]
+instance Heyting (Relation) where
+  x ==> y = neg x \/ y
+  neg R {branches = Top, wild = Bottom, dim = n} = R {branches = bottom, wild = Bottom, dim = n}
+  neg (x@R {}) = x {wild = neg (wild x)}
 
 --- For retrieving
 data Val = V Key | S deriving (Eq, Ord)
@@ -132,17 +144,17 @@ instance ToIntSet Integer where
 ---------------------------------------------------
 -- Exported functionality, reletional funcs
 ---------------------------------------------------
-normalize :: (Relation) -> (Relation)
-normalize (x@(R {})) = R {wild = normalizeWild (wild x), branches = normalizeIntMap}
-  where
-    normalizeIntMap = IntMap.filter (not . isEmpty) (IntMap.map normalize (branches x))
+-- normalize :: (Relation) -> (Relation)
+-- normalize (x@(R {})) = R {wild = normalizeWild (wild x), branches = normalizeIntMap}
+--   where
+--     normalizeIntMap = IntMap.filter (not . isEmpty) (IntMap.map normalize (branches x))
 
-normalizeWild :: (Wild) -> (Wild)
-normalizeWild (Lift xs) = case normalize xs of
-  xs' | isEmpty xs' -> Bottom
-  -- xs' | isUniv xs' -> Univ
-  xs' -> Lift xs'
-normalizeWild u = u
+-- normalizeWild :: (Wild) -> (Wild)
+-- normalizeWild (Lift xs) = case normalize xs of
+--   xs' | isEmpty xs' -> Bottom
+--   -- xs' | isUniv xs' -> Univ
+--   xs' -> Lift xs'
+-- normalizeWild u = u
 
 -- (/\) :: (Relation) -> (Relation) -> (Relation)
 -- Univ /\ x = x
@@ -154,59 +166,14 @@ x `intersectWild` Bottom = x
 Bottom `intersectWild` x = x
 Lift v `intersectWild` Lift w = Lift (v /\ w)
 
---- Also needs to be same dim!
--- (\/) :: (Relation) -> (Relation) -> (Relation)
--- Univ \/ _ = Univ
--- _ \/ Univ = Univ
--- (R (xs, _)) \/ R (ys, Bottom) = assert (IntMap.null xs || IntMap.null ys) $ empty1
--- (R (xs, Bottom)) \/ R (ys, _) = assert (IntMap.null xs || IntMap.null ys) $ empty1
--- x@(R (_, Lift _)) \/ y@(R (_, Lift _)) = compl $ compl x \\ y
-
--- (R (xs, v)) \/ (R (ys, w)) = R (IntMap.unionWith (\/) xs ys, v `unionWild` w)
-
--- (\\) :: (Relation) -> (Relation) -> (Relation)
--- Univ \\ x = compl x
--- _ \\ Univ = empty1
--- R v (xs) \\ R w (ys) = R wildDiff (IntMap.differenceWith diff xs ys)
---   where
---     diff x y = Just (x \\ y)
---     wildDiff = case (v, w) of
---       (Bottom, _) -> Bottom
---       (x, Bottom) -> x
---       (Lift x, Lift y) -> Lift $ x \\ y
-
 unionWild :: (Wild) -> (Wild) -> (Wild)
 x `unionWild` Bottom = x
 Bottom `unionWild` x = x
 Lift v `unionWild` Lift w = Lift (v \/ w)
 
--- (><) :: (Relation) -> (Relation) -> (Relation)
--- Univ >< x = x
--- x >< Univ = x
--- (R w (xs)) >< y = R (wildProd w) ((>< y) <$> xs)
---   where
---     wildProd Bottom = toBottom y
---     wildProd (Lift v) = Lift (v >< y)
---     toBottom z = case z of
---       Univ -> Bottom
---       R Bottom (_) -> Lift empty1
---       R (Lift v) (_) -> Lift (R (toBottom v) mempty)
-
-univ :: (Relation)
-univ = Univ
-
-empty1 :: (Relation)
-empty1 = R Bottom mempty
-
 isEmpty :: (Relation) -> Bool
 isEmpty R {wild = Bottom, branches = xs} = null xs
 isEmpty _ = False
-
---- Note: While Bottom always propagates, Univ can be layers deep!
--- isUniv :: (Relation) -> Bool
--- isUniv Univ = True
--- isUniv (R (Lift w) (xs)) = null xs || isUniv w
--- isUniv (R Bottom (_)) = False
 
 --- Exported for tests
 dictEq :: (Relation) -> (Relation) -> Bool
@@ -224,29 +191,18 @@ dictEq x y = us == vs
 -- normalize (R (xs, W ys)) = case (IntMap.map normalize xs, normalize ys) of
 --   (xs', Univ) -> undefined
 
---- Constructors
--- empty :: Dict
--- empty = Dict Bottom IntMap.empty
-
---- NOTE: Should univ be End or * mapsto End ?
---- Take the one that satisfies compl . compl = id!
--- univ :: Dict
--- univ = End
-
--- singleton :: Key -> Dict -> Dict
--- singleton k r = Dict Bottom $ IntMap.singleton k r
-
 finite :: (ToIntSet a) => a -> (Relation)
-finite x = R {wild = bottom, branches = (IntMap.fromSet (\_ -> univ) (toSet x)), dim = 1}
+finite x = R {wild = bottom, branches = Drop (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
 
 cofinite :: (ToIntSet a) => a -> (Relation)
-cofinite x = R {wild = top, branches = (IntMap.fromSet (\_ -> univ) (toSet x)), dim = 1}
+cofinite x = R {wild = top, branches = Drop (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
 
 ---------------------------------------------------
 -- Testing help
 ---------------------------------------------------
 tries :: (Relation) -> [Trie]
-tries (R {wild = w, branches = xs}) = fins ++ wilds
+tries R {branches = Top} = [[S]]
+tries (R {wild = w, branches = Drop xs}) = fins ++ wilds
   where
     fins = do
       (k, v) <- IntMap.assocs xs
@@ -262,7 +218,8 @@ tries (R {wild = w, branches = xs}) = fins ++ wilds
 -- TRY 2: Helper-functions
 ---------------------------------------------------
 lookupKey :: Key -> (Relation) -> Maybe (Relation)
-lookupKey k (R {branches = xs}) = IntMap.lookup k xs
+lookupKey _ (R {branches = Top}) = Nothing
+lookupKey k (R {branches = Drop xs}) = IntMap.lookup k xs
 
 lookupWild :: (Relation) -> (Wild)
 lookupWild (R {wild = Bottom}) = Bottom
@@ -353,7 +310,6 @@ genRelIntMap n = do
   pure $ fromList (zip keys vals)
 
 ---------------------------------------------------
-
 -- Pretty-show implementations
 ---------------------------------------------------
 
@@ -373,3 +329,11 @@ instance PrettyShow (Relation) where
 instance PrettyShow (Wild) where
   pshow Bottom = ""
   pshow (Lift a) = ", * -> " ++ pshow a
+
+---------------------------------------------------
+-- Repl stuff
+---------------------------------------------------
+uuu :: (Relation)
+uuu = finite [1, 2, 3]
+vvv :: (Relation)
+vvv = cofinite [2, 3, 4]
