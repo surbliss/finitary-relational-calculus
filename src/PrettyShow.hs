@@ -3,9 +3,6 @@ module PrettyShow where
 import Data.IntMap.Strict qualified as IntMap
 import Data.IntSet qualified as IntSet
 
--- import Data.IntSet (IntSet)
--- import Data.Set qualified as Set
-
 class PrettyShow a where
   pshow :: a -> String
 
