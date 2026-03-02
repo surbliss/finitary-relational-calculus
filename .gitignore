@@ -17,3 +17,4 @@ result-*
 material/
 *.zip
 .envrc
+garbage/

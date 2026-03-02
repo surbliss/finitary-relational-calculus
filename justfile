@@ -18,8 +18,8 @@ run-set:
     ghcid --command="ghci -isrc src/main-old2.hs" --run="main" --test-message="" -W -q
 
 
-test:
-    cabal test
+test *ARGS:
+    cabal test {{ ARGS }}
 
 watch:
     watchexec -e hs cabal test

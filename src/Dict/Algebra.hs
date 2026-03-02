@@ -5,165 +5,172 @@ module Dict.Algebra where
 
 import Algebra.Heyting
 import Algebra.Lattice
-import Algebra.Lattice.Dropped
-import Algebra.Lattice.Lifted
 import Control.Exception (assert)
-import Text.Show qualified
-
 import Data.IntMap.Strict qualified as IntMap
 import PrettyShow
+import Test.QuickCheck hiding ((><))
+import Text.Show qualified
 
 default (Int)
 
 type Key = Int
-type Wild = Lifted Relation
-type Branches = Dropped (IntMap Relation)
+
+-- type Wild = Lifted Relation
+-- type Branches = Dropped (IntMap Relation)
+
+data Wild = None | W Relation deriving (Show, Eq, Ord)
+data Branches = B (IntMap Relation) | End deriving (Show, Eq, Ord)
 
 data Relation
   = R
-  { wild :: Lifted Relation
-  , branches :: Dropped (IntMap Relation)
+  { wild :: Wild
+  , branches :: Branches
   , dim :: Nat
   }
   deriving (Show, Eq, Ord)
 
 ---------------------------------------------------
+-- Transformers for normalizing
+---------------------------------------------------
+--- These don't do recursive calls, just normalize one step down. So fine to use in other functions
+toWild :: Relation -> Wild
+toWild r
+  | isEmpty r = None
+  | otherwise = W r
+
+bottomIfNull :: Wild -> Wild
+bottomIfNull None = None
+bottomIfNull (W xs)
+  | isEmpty xs = None
+  | otherwise = W xs
+
+-- Transformer, to be applied to map functions. Makes functions return 'Nothing' if the resulting set Relation is empty, so it can be combined with 'IntMap.mapMaybe'
+ifNotNull :: (Relation -> Relation) -> Relation -> Maybe Relation
+ifNotNull f x
+  | isEmpty res = Nothing
+  | otherwise = Just res
+  where
+    res = f x
+
+-- Only one layer down, so requires 'Wilds' to be normalized, i.e. no empty Lifts.
+isEmpty :: Relation -> Bool
+isEmpty R {branches = B xs, wild = None} = IntMap.null xs
+isEmpty _ = False
+
+-- Same here
+isUniv :: Relation -> Bool
+isUniv R {branches = End, wild = None} = True
+isUniv R {branches = B xs, wild = W R {branches = End, wild = None}} = IntMap.null xs
+isUniv _ = False
+
+isEmptyBranches :: Branches -> Bool
+isEmptyBranches End = False
+isEmptyBranches (B xs) = IntMap.null xs
+
+---------------------------------------------------
 -- Lattice class instances
 ---------------------------------------------------
 
-(\\) :: (Heyting a) => a -> a -> a
-x \\ b = x /\ neg b
-
-class Extra a where
-  sym :: a -> a -> a
-
---- Difference
-instance Extra Branches where
-  -- Top \\ x = neg x
-  -- _ \\ Top = bottom
-  -- Drop xs \\ Drop ys = Drop $ IntMap.differenceWith (\x y -> properRel $ x \\ y) xs ys
-  x `sym` y = case (x \\ y, y \\ x) of
-    (Drop xs, Drop ys) -> Drop $ IntMap.union xs ys
-    (Top, ys) -> neg ys
-    (xs, Top) -> neg xs
-
-instance Extra Wild where
-  -- Bottom \\ _ = Bottom
-  -- x \\ Bottom = x
-  -- Lift x \\ Lift y = case properRel (x \\ y) of
-  --   Nothing -> Bottom
-  --   Just r -> Lift r
-
-  x `sym` y = undefined
-
-instance Extra Relation where
-  -- Don't think this is right...
-  -- r \\ s = case (wild r, wild s) of
-  --   (Bottom, Bottom) -> r {branches = branches r \\ branches s}
-  --   (_, _) -> r /\ neg s
-
-  -- R {branches = xs, wild = v, dim = n} \\ R {branches = ys, wild = w, dim = m} =
-  --   assert (n == m) $ R {branches = (xs \\ ys) `sym` (interWild ys w), wild = v \\ w, dim = n}
-
-  r `sym` s = undefined
+--- Branches
+instance Lattice Branches where
+  End /\ x = x
+  x /\ End = x
+  B xs /\ B ys = B $ IntMap.filter (not . isEmpty) $ IntMap.intersectionWith (/\) xs ys
+  End \/ _ = End
+  _ \/ End = End
+  B xs \/ B ys = B $ IntMap.unionWith (normalizingUnion) xs ys
     where
-      bs = branches r
+      normalizingUnion x y = case x \/ y of
+        r | isUniv r -> r {branches = End, wild = None}
+        r -> r
+instance BoundedJoinSemiLattice Branches where
+  bottom = B IntMap.empty
+instance BoundedMeetSemiLattice Branches where
+  top = End
+instance Heyting Branches where
+  x ==> y = neg x \/ y -- TODO: More efficient version?
+  neg End = bottom
+  neg (B xs)
+    | IntMap.null xs = End
+    | otherwise = B $ neg <$> xs
 
-symDiff :: IntMap a -> IntMap a -> IntMap a
-x `symDiff` y = (x IntMap.\\ y) <> (y IntMap.\\ x)
+--- Wild
+instance Lattice Wild where
+  None /\ _ = None
+  _ /\ None = None
+  W w /\ W v = case w /\ v of
+    r | isEmpty r -> None
+    r -> W r
 
-symDiffLatt :: (Heyting a) => a -> a -> a
-x `symDiffLatt` y = (neg x /\ y) \/ (x /\ neg y)
+  None \/ x = x
+  x \/ None = x
+  W w \/ W v = W $ case w \/ v of
+    r | isUniv r -> r {branches = End, wild = None} -- not 'top' so dimension is kept
+    r -> r
+
+instance BoundedJoinSemiLattice Wild where
+  bottom = None
+
+instance BoundedMeetSemiLattice Wild where
+  top = W top
+
+instance Heyting (Wild) where
+  x ==> y = neg x \/ y
+  neg None = top
+  neg (W x) = case neg x of
+    r | isEmpty r -> bottom
+    r -> W r
+
+--- Relation
+instance Lattice Relation where
+  r /\ s = r {branches = resBranches, wild = resWild}
+    where
+      resWild = wild r /\ wild s
+      resBranches =
+        -- trace (show r <> "\n" <> show s) $
+        (branches r /\ branches s)
+          `sym` (branches r `interWild` wild s)
+          `sym` (branches s `interWild` wild r)
+
+  r@R {branches = xs, wild = None, dim = n} \/ R {branches = ys, wild = None} = r {branches = xs \/ ys, wild = None, dim = n}
+  x \/ y = undefined
+
+instance BoundedJoinSemiLattice (Relation) where
+  bottom = R {branches = bottom, wild = None, dim = 0}
+
+instance BoundedMeetSemiLattice (Relation) where
+  top = R {branches = top, wild = None, dim = 0}
+
+instance Heyting (Relation) where
+  x ==> y = neg x \/ y
+
+  -- neg r | isEmpty r = top
+  neg r = r {wild = neg (wild r)}
+
+-- case wild r of
+--   None -> r {wild = top}
+--   W x | x == top -> r {wild = bottom}
+--   W x -> r {wild = W $ neg x}
+
+(\\) :: (Heyting a) => a -> a -> a
+x \\ y = x /\ neg y
+
+sym :: (Heyting a) => a -> a -> a
+x `sym` y = (x \\ y) \/ (y \\ x)
 
 interWild :: Branches -> Wild -> Branches
-interWild _ Bottom = bottom
-interWild Top (Lift _) = error "Wildcard deeper than branches"
-interWild (Drop xs) (Lift w) = Drop $ (IntMap.mapMaybe (`interMaybe` w) xs)
+interWild _ None = bottom
+interWild End (W _) = top
+interWild (B xs) (W w) = B $ (IntMap.mapMaybe (`interMaybe` w) xs)
   where
     x `interMaybe` y = properRel $ x /\ y
 
 --- If the branch-set is empty, propagate Nothing (that should only be allowed
 --- for the top-level empty relation)
 properRel :: Relation -> Maybe Relation
-properRel R {branches = Drop xs}
+properRel R {branches = B xs}
   | null xs = Nothing
 properRel r = Just r
-
--- sym :: (Heyting a) => a -> a -> a
--- x `sym` y = (x \\ y) \/ (y \\ x)
-
--- interDiff :: (Heyting b) => IntMap b -> Lifted b -> IntMap b
--- interDiff _ Bottom = bottom
--- interDiff xs (Lift w) = IntMap.map (\\ w) xs
-
-instance Lattice (Relation) where
-  r /\ s = assert (dim r == dim s) $ case (wild r, wild s) of
-    (Bottom, Bottom) -> r {branches = branches r /\ branches s}
-    (v, w) ->
-      let
-        xs = branches r
-        ys = branches s
-        newBranches = (xs /\ ys) `sym` interWild xs w `sym` interWild ys v
-       in
-        r {branches = newBranches, wild = v /\ w}
-
-  -- R {wild = Bottom, branches = Top, dim = n} /\ R {wild = Bottom, branches = Top, dim = m} = assert (n == m) $ R {wild = Bottom, branches = Top, dim = n}
-  -- R {wild = v, branches = xs, dim = n} /\ R {wild = w, branches = ys, dim = m} =
-  --   R
-  --     { wild = (v /\ w)
-  --     , branches = (xs /\ ys) `sym` (xs `interWild` w) `sym` (ys `interWild` v)
-  --     , dim = assert (n == m) n
-  --     }
-  --   where
-  --     ysv = interWild ys v
-  --     xsw = interWild xs w
-
-  r@R {branches = xs, wild = Bottom, dim = n} \/ s@R {branches = ys, wild = Bottom} = R {branches = xs \/ ys, wild = Bottom, dim = n}
-  -- r@R {branches = Top} \/ _ = r
-  -- _ \/ s@R {branches = Top} = s
-  x \/ y = undefined
-
--- R {wild = v, branches = xs, dim = nx} \/ R {wild = w, branches = ys, dim = ny} =
---   R {wild = wildUnion, branches = elemUnionv, dim = nx}
---   where
---     -- x@(R {}) \/ y@(R {}) = case (wild x, wild y) of
---     --   (Bottom, Bottom) -> R {branches = branches x \/ branches ys}
---     --   (Lift v, Bottom) -> R ()
---     -- R {wild = Bottom, branches = xs} \/ R {wild = Bottom, branches = ys} = R {wild = Bottom, branches = (xs \/ ys)}
---     -- R (Lift v) xs \/ R Bottom ys = R (Lift v) (interDiff xs (Lift v) \/ ys)
---     -- R Bottom xs \/ R (Lift w) ys = R (Lift w) (xs \/ interDiff ys (Lift w))
---     -- R v xs \/ R w ys = R wildUnion elemUnion -- FIX: Not correct yet
-
---     wildUnion = v \/ w
---     xs' = interDiff xs wildUnion
---     ys' = interDiff ys wildUnion
---     elemUnion = xs' \/ ys'
-
-instance BoundedJoinSemiLattice (Relation) where
-  bottom = R {branches = bottom, wild = Bottom, dim = 0}
-
-instance BoundedMeetSemiLattice (Relation) where
-  top = R {branches = top, wild = Bottom, dim = 0}
-
-instance Heyting Branches where
-  x ==> y = neg x \/ y
-  neg Top = bottom
-  neg (Drop xs) = Drop $ neg <$> xs
-
-instance Heyting (Wild) where
-  x ==> y = neg x \/ y
-  neg Bottom = top
-  neg (Lift x) = case neg x of
-    R {wild = Bottom, branches = Top} -> top
-    R {wild = Bottom, branches = xs} | null xs -> bottom
-    y -> Lift y
-
-instance Heyting (Relation) where
-  x ==> y = neg x \/ y
-  neg r = case wild r of
-    Bottom -> r {wild = top}
-    Lift x | x == top -> r {wild = bottom}
-    Lift x -> r {wild = Lift $ neg x}
 
 --- For retrieving
 data Val = V Key | S deriving (Eq, Ord)
@@ -200,10 +207,10 @@ instance ToIntSet Integer where
 --     normalizeIntMap = IntMap.filter (not . isEmpty) (IntMap.map normalize (branches x))
 
 -- normalizeWild :: (Wild) -> (Wild)
--- normalizeWild (Lift xs) = case normalize xs of
+-- normalizeWild (W xs) = case normalize xs of
 --   xs' | isEmpty xs' -> Bottom
 --   -- xs' | isUniv xs' -> Univ
---   xs' -> Lift xs'
+--   xs' -> W xs'
 -- normalizeWild u = u
 
 -- (/\) :: (Relation) -> (Relation) -> (Relation)
@@ -212,18 +219,14 @@ instance ToIntSet Integer where
 -- (R (xs, v)) /\ (R (ys, w)) = R (IntMap.intersectionWith (/\) xs ys, v `intersectWild` w)
 
 intersectWild :: (Wild) -> (Wild) -> (Wild)
-x `intersectWild` Bottom = x
-Bottom `intersectWild` x = x
-Lift v `intersectWild` Lift w = Lift (v /\ w)
+x `intersectWild` None = x
+None `intersectWild` x = x
+W v `intersectWild` W w = W (v /\ w)
 
 unionWild :: (Wild) -> (Wild) -> (Wild)
-x `unionWild` Bottom = x
-Bottom `unionWild` x = x
-Lift v `unionWild` Lift w = Lift (v \/ w)
-
-isEmpty :: (Relation) -> Bool
-isEmpty R {wild = Bottom, branches = xs} = null xs
-isEmpty _ = False
+x `unionWild` None = x
+None `unionWild` x = x
+W v `unionWild` W w = W (v \/ w)
 
 --- Exported for tests
 dictEq :: (Relation) -> (Relation) -> Bool
@@ -236,30 +239,30 @@ dictEq x y = us == vs
 -- Interface for interacting with Dicts
 ---------------------------------------------------
 -- normalize :: (Relation) -> (Relation)
--- normalize Bottom = Bottom
+-- normalize None= Bottom
 -- normalize (R (xs, Univ)) = R (IntMap.map normalize xs, Univ)
 -- normalize (R (xs, W ys)) = case (IntMap.map normalize xs, normalize ys) of
 --   (xs', Univ) -> undefined
 
 finite :: (ToIntSet a) => a -> (Relation)
-finite x = R {wild = bottom, branches = Drop (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
+finite x = R {wild = bottom, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
 
 cofinite :: (ToIntSet a) => a -> (Relation)
-cofinite x = R {wild = top, branches = Drop (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
+cofinite x = R {wild = top, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
 
 ---------------------------------------------------
 -- Testing help
 ---------------------------------------------------
 tries :: (Relation) -> [Trie]
-tries R {branches = Top} = [[S]]
-tries (R {wild = w, branches = Drop xs}) = fins ++ wilds
+tries R {branches = End} = [[S]]
+tries (R {wild = w, branches = B xs}) = fins ++ wilds
   where
     fins = do
       (k, v) <- IntMap.assocs xs
       (V k :) <$> tries v
     wilds = case w of
-      Bottom -> []
-      Lift x -> (S :) <$> tries x
+      None -> []
+      W x -> (S :) <$> tries x
 
 ---------------------------------------------------
 -- For assert-repl-testing
@@ -268,12 +271,12 @@ tries (R {wild = w, branches = Drop xs}) = fins ++ wilds
 -- TRY 2: Helper-functions
 ---------------------------------------------------
 lookupKey :: Key -> (Relation) -> Maybe (Relation)
-lookupKey _ (R {branches = Top}) = Nothing
-lookupKey k (R {branches = Drop xs}) = IntMap.lookup k xs
+lookupKey _ (R {branches = End}) = Nothing
+lookupKey k (R {branches = B xs}) = IntMap.lookup k xs
 
 lookupWild :: (Relation) -> (Wild)
-lookupWild (R {wild = Bottom}) = Bottom
-lookupWild (R {wild = Lift w}) = Lift w
+lookupWild (R {wild = None}) = None
+lookupWild (R {wild = W w}) = W w
 
 -- depth: How far down to 'Top'
 
@@ -282,7 +285,7 @@ lookupWild (R {wild = Lift w}) = Lift w
 --   where
 --     depthsBranches
 --   (Bottom, Top) -> [n]
---   (Lift w', Top) -> [n] <> depthsAll w'
+--   (W w', Top) -> [n] <> depthsAll w'
 --   ()
 
 ---------------------------------------------------
@@ -296,23 +299,150 @@ vvv = cofinite [2, 3, 4]
 ---------------------------------------------------
 -- Pretty-printing
 ---------------------------------------------------
-instance PrettyShow (Relation) where
-  pshow (R {wild = Bottom, branches = Drop xs}) | null xs = "Ø"
-  pshow (R {branches = Top}) = "U"
-  pshow (R {wild = w, branches = Drop xs}) = "{" ++ elmArrs ++ pshow w ++ "}"
+instance PrettyShow Relation where
+  pshow (R {wild = None, branches = B xs}) | null xs = "Ø"
+  pshow (R {branches = End}) = "U"
+  pshow (R {wild = w, branches = B xs}) = "{" ++ elmArrs ++ pshow w ++ "}"
     where
       kvs = IntMap.assocs xs
       elmArrs = intercalate ", " $ map (\(x, y) -> pshow x ++ " -> " ++ pshow y) kvs
-      -- TODO
-      wArr = case w of
-        Bottom -> ""
-        Lift w' | isEmpty w' -> ""
-        w' -> ", " ++ pshow w'
+
+-- TODO
 
 instance PrettyShow (Wild) where
-  pshow Bottom = ""
-  pshow (Lift a) = ", * -> " ++ pshow a
+  pshow None = ""
+  pshow (W a) = ", * -> " ++ pshow a
 
 instance PrettyShow (Branches) where
-  pshow Top = "U"
-  pshow (Drop x) = pshow x
+  pshow End = "U"
+  pshow (B x) = pshow x
+
+---------------------------------------------------
+-- For testing
+---------------------------------------------------
+-- Remove all empty dead-ends
+-- maybeNormal :: Relation -> Maybe Relation
+-- maybeNormal r@R {branches = Top} = Just r
+-- maybeNormal R {branches = Drop xs} | null xs = Nothing
+-- maybeNormal r@R {branches = Drop xs} = Just $ r {branches = Drop (IntMap.map normalize xs)}
+
+-- normalizeMaybe :: Relation -> Maybe Relation
+-- normalizeMaybe R {branches = Drop xs, wild = Bottom} | IntMap.null xs = Nothing
+-- normalizeMaybe r = case (newWild, newBranches) of
+--   (Bottom, Drop xs) | IntMap.null xs -> Nothing
+--   _ -> Just r {wild = newWild, branches = newBranches}
+--   where
+--     newWild = case wild r of
+--       Bottom -> Bottom
+--       Lift w -> case normalizeMaybe w of
+--         Nothing -> Bottom
+--         Just w' -> Lift w'
+--     newBranches = case branches r of
+--       Top -> Top
+--       Drop xs -> Drop $ IntMap.mapMaybe normalizeMaybe xs
+
+-- normalizeMaybe r@R {branches = Top, wild = Bottom} = Just r
+-- normalizeMaybe r@R {branches = Top, wild = Lift w} = case normalizeMaybe w of
+--   Just w' -> Just r {wild = Lift w'}
+--   Nothing -> Just r {wild = bottom}
+
+-- normalize :: Relation -> Relation
+-- normalize r = case normalizeMaybe r of
+--   Just x -> x
+--   Nothing -> bottom
+
+projLast :: Relation -> Relation
+projLast r | isEmpty r = bottom
+projLast R {dim = 1} = top
+projLast r@R {branches = End, dim = n} = r {dim = n - 1}
+projLast r@R {branches = B xs, wild = W w, dim = n} = r {branches = B $ IntMap.map projLast xs, wild = W $ projLast w, dim = n - 1}
+projLast r@R {branches = B xs, wild = None, dim = n} = r {branches = B $ IntMap.map projLast xs, dim = n - 1}
+
+---------------------------------------------------
+-- Generator
+---------------------------------------------------
+
+-- Generator + arbitrary
+arbitraryRelIntMap :: Gen (IntMap (Relation))
+arbitraryRelIntMap = do
+  n <- chooseInt (0, 5)
+  genRelIntMap n
+
+--- Don't shrink into empties!
+shrinkRelMap :: IntMap (Relation) -> [IntMap (Relation)]
+shrinkRelMap xs = deletedKeys ++ shrunkElems
+  where
+    -- NOTE: Can also produce empty mapping
+    deletedKeys = [IntMap.delete x xs | x <- IntMap.keys xs]
+    shrunkElems =
+      [ IntMap.insert x ys' xs
+      | (x, ys) <- IntMap.assocs xs
+      , ys' <- shrink ys
+      -- , not (isEmpty ys') -- _But_ never allow binding a key to an empty map!
+      ]
+
+instance Arbitrary (Relation) where
+  arbitrary = do
+    n <- chooseInt (0, 5)
+    genRel n
+
+  shrink r =
+    [r {branches = xs} | xs <- shrinkBranches (branches r)]
+      <> [r {wild = w} | w <- shrinkWild (wild r)]
+      <> [projLast r]
+      <> [s | B xs <- [branches r], s <- IntMap.elems xs]
+      <> [w | W w <- [wild r]]
+
+shrinkBranches :: Branches -> [Branches]
+shrinkBranches End = []
+shrinkBranches (B xs) = [End] ++ [B ys | ys <- shrink xs]
+
+-- shrinkElems :: (Relation) -> [(Relation)]
+-- shrinkElems r@R {branches = xs}
+--   | null xs = []
+--   | all (== Top) xs = [top]
+--   | otherwise = r {branches = traverse shrinkElems xs}
+
+shrinkWild :: Wild -> [Wild]
+shrinkWild None = []
+shrinkWild (W w) =
+  [None]
+    ++ [ W w'
+       | w' <- shrink w
+       , case branches w' of
+           B xs -> not (IntMap.null xs)
+           End -> True
+       , not (wild w' == None)
+       ]
+
+---------------------------------------------------
+genRel :: Int -> Gen (Relation)
+genRel n | n < 1 = pure top
+genRel n = do
+  nKeys <- chooseInt (1, 5)
+  keys <- vectorOf nKeys (arbitrary :: Gen Key)
+  ds <- vectorOf nKeys $ genRel (n - 1)
+  w <- genWild (n - 1)
+  pure $ R {wild = w, branches = B (IntMap.fromList (zip keys ds)), dim = fromIntegral n}
+
+genWild :: Int -> Gen Wild
+genWild n | n < 0 = pure None
+genWild n = W <$> genRel n
+
+genRelIntMap :: Int -> Gen (IntMap (Relation))
+genRelIntMap n | n < 1 = pure IntMap.empty
+genRelIntMap n = do
+  nKeys <- chooseInt (1, 5)
+  keys <- vectorOf nKeys arbitrary
+  vals <- vectorOf nKeys (frequency [(2, genRel (n - 1)), (1, pure top)])
+  pure $ fromList (zip keys vals)
+
+---------------------------------------------------
+-- Functions for tests
+---------------------------------------------------
+hasNoEmpty :: Relation -> Bool
+hasNoEmpty R {branches = B xs} | IntMap.null xs = False
+hasNoEmpty R {branches = B xs, wild = W w} = hasNoEmpty w && all hasNoEmpty xs
+hasNoEmpty R {branches = B xs} = all hasNoEmpty xs
+hasNoEmpty R {wild = W w} = hasNoEmpty w
+hasNoEmpty _ = True

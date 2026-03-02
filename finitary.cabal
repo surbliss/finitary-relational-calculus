@@ -51,11 +51,17 @@ executable run
 
 test-suite finitary-test
   import: common
+  ghc-options:
+    -Wno-unused-matches
+    -Wno-deprecations
+    -Wno-unused-local-binds
+
   main-is: runtests.hs
   type: exitcode-stdio-1.0
   other-modules:
     Dict.Algebra
     Dict.Tests
+    PrettyShow
 
   build-depends:
     QuickCheck,
