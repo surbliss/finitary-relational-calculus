@@ -5,7 +5,6 @@ module Dict.Algebra where
 
 import Algebra.Heyting
 import Algebra.Lattice
-import Control.Exception (assert)
 import Data.IntMap.Strict qualified as IntMap
 import PrettyShow
 import Test.QuickCheck hiding ((><))
@@ -27,7 +26,10 @@ data Relation
   , branches :: Branches
   , dim :: Nat
   }
-  deriving (Show, Eq, Ord)
+  deriving (Eq, Ord)
+
+instance Show Relation where
+  show = pshow
 
 ---------------------------------------------------
 -- Transformers for normalizing
@@ -71,7 +73,7 @@ isEmptyBranches (B xs) = IntMap.null xs
 -- Lattice class instances
 ---------------------------------------------------
 
---- Branches
+--- Lattice
 instance Lattice Branches where
   End /\ x = x
   x /\ End = x
@@ -83,16 +85,36 @@ instance Lattice Branches where
       normalizingUnion x y = case x \/ y of
         r | isUniv r -> r {branches = End, wild = None}
         r -> r
+
+--- Bounded _ SemiLattice
 instance BoundedJoinSemiLattice Branches where
   bottom = B IntMap.empty
 instance BoundedMeetSemiLattice Branches where
   top = End
+
+-- - Heyting
 instance Heyting Branches where
   x ==> y = neg x \/ y -- TODO: More efficient version?
   neg End = bottom
   neg (B xs)
     | IntMap.null xs = End
-    | otherwise = B $ neg <$> xs
+    | otherwise = B $ IntMap.mapMaybe negNotEmpty xs
+    where
+      negNotEmpty x
+        | isEmpty x = Nothing
+        | otherwise = Just x
+instance Heyting (Wild) where
+  x ==> y = neg x \/ y
+  neg None = top
+  neg (W x) = case neg x of
+    r | isEmpty r -> bottom
+    r -> W r
+instance Heyting (Relation) where
+  x ==> y = neg x \/ y
+
+  neg r@R {branches = B xs} | IntMap.null xs = r {branches = top}
+  neg r@R {branches = End} = r {branches = bottom}
+  neg r = r {wild = neg (wild r)}
 
 --- Wild
 instance Lattice Wild where
@@ -114,13 +136,6 @@ instance BoundedJoinSemiLattice Wild where
 instance BoundedMeetSemiLattice Wild where
   top = W top
 
-instance Heyting (Wild) where
-  x ==> y = neg x \/ y
-  neg None = top
-  neg (W x) = case neg x of
-    r | isEmpty r -> bottom
-    r -> W r
-
 --- Relation
 instance Lattice Relation where
   r /\ s = r {branches = resBranches, wild = resWild}
@@ -132,20 +147,23 @@ instance Lattice Relation where
           `sym` (branches r `interWild` wild s)
           `sym` (branches s `interWild` wild r)
 
-  r@R {branches = xs, wild = None, dim = n} \/ R {branches = ys, wild = None} = r {branches = xs \/ ys, wild = None, dim = n}
-  x \/ y = undefined
+  r \/ s = case (wild r, wild s) of
+    (None, None) -> r {branches = branches r \/ branches s}
+    (None, W _) -> s {branches = branches r \\ notS}
+    (W _, None) -> r {branches = branches s \\ notR}
+    (W _, _) -> undefined
+    where
+      notS = interWild (branches s) (wild s)
+      notR = interWild (branches r) (wild r)
+
+-- r@R {branches = xs, wild = None, dim = n} \/ R {branches = ys, wild = None} = r {branches = xs \/ ys, wild = None, dim = n}
+-- x \/ y = undefined
 
 instance BoundedJoinSemiLattice (Relation) where
   bottom = R {branches = bottom, wild = None, dim = 0}
 
 instance BoundedMeetSemiLattice (Relation) where
   top = R {branches = top, wild = None, dim = 0}
-
-instance Heyting (Relation) where
-  x ==> y = neg x \/ y
-
-  -- neg r | isEmpty r = top
-  neg r = r {wild = neg (wild r)}
 
 -- case wild r of
 --   None -> r {wild = top}

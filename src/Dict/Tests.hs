@@ -122,8 +122,8 @@ simpleTests =
     , testCase "inter 4" $ cfin [1, 2, 3] /\ fin [2, 3, 4] @?= fin [4]
     , testCase "union 1" $ fin [1, 2, 3] \/ fin [2, 3, 4] @?= fin [1, 2, 3, 4]
     , testCase "union 2" $ cfin [1, 2, 3] \/ cfin [2, 3, 4] @?= cfin [2, 3]
-    , testCase "union 2" $ fin [1, 2, 3] \/ cfin [2, 3, 4] @?= cfin [4]
-    , testCase "union 2" $ cfin [1, 2, 3] \/ fin [2, 3, 4] @?= cfin [1]
+    , testCase "union 3" $ fin [1, 2, 3] \/ cfin [2, 3, 4] @?= cfin [4]
+    , testCase "union 4" $ cfin [1, 2, 3] \/ fin [2, 3, 4] @?= cfin [1]
     ]
 
 tests :: TestTree
