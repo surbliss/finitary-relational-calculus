@@ -130,6 +130,6 @@ tests :: TestTree
 tests =
   testGroup
     "All dict tests"
-    [ -- propertyTests,
-      simpleTests
+    [ propertyTests
+    , simpleTests
     ]

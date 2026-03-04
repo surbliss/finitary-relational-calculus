@@ -83,9 +83,34 @@ B xs `symBranches` B ys = simplifyBranches $ B $ IntMap.union diff1 diff2
     diff2 = IntMap.differenceWith (nonEmptyDiff) ys xs
 
 ---------------------------------------------------
+-- Bonus-classes
+---------------------------------------------------
+class SymDiff a where
+  (\\) :: a -> a -> a
+  sym :: a -> a -> a
+
+instance SymDiff Wild where
+  x \\ y = x /\ neg y
+  x `sym` y = (x \\ y) \/ (y \\ x)
+
+instance SymDiff Relation where
+  x \\ y = x /\ neg y
+  x `sym` y = (x \\ y) \/ (y \\ x)
+
+--- As we can't negate Branches, need specific implementation here!
+instance SymDiff Branches where
+  B xs \\ B ys = B $ IntMap.differenceWith (nonEmptyDiff) xs ys
+    where
+      x `nonEmptyDiff` y = case (x \\ y) of
+        r
+          | isEmpty r -> Nothing
+          | otherwise -> Just r
+
+  x `sym` y = (x \\ y) \/ (y \\ x)
+
+---------------------------------------------------
 -- Lattice class instances
 ---------------------------------------------------
-
 --- Lattice
 instance Lattice Branches where
   B xs /\ B ys = simplifyBranches $ B $ IntMap.intersectionWith (/\) xs ys
@@ -113,20 +138,11 @@ instance Lattice Relation where
       resBranches =
         -- trace (show r <> "\n" <> show s) $
         (branches r /\ branches s)
-          `symBranches` (branches r `interWild` wild s)
-          `symBranches` (branches s `interWild` wild r)
+          `sym` (branches r `interWild` wild s)
+          `sym` (branches s `interWild` wild r)
 
-  r \/ s = case (wild r, wild s) of
-    (None, None) -> r {branches = branches r \/ branches s}
-    (None, _) -> s {branches = branches r `symBranches` notS}
-    (_, None) -> r {branches = branches s `symBranches` notR}
-    (Univ, Univ) -> r {branches = branches r \/ branches s}
-    (Univ, _) -> undefined
-    (_, Univ) -> undefined
-    (W _, _) -> undefined
-    where
-      notS = interWild (branches s) (wild s)
-      notR = interWild (branches r) (wild r)
+  -- PERF: Most certainly not the most efficient implementation, but works for now
+  r \/ s = neg (neg r /\ neg s)
 
 --- Bounded _ SemiLattice
 instance BoundedJoinSemiLattice Branches where
@@ -163,12 +179,6 @@ instance BoundedMeetSemiLattice (Relation) where
 --   None -> r {wild = top}
 --   W x | x == top -> r {wild = bottom}
 --   W x -> r {wild = W $ neg x}
-
-(\\) :: (Heyting a) => a -> a -> a
-x \\ y = x /\ neg y
-
-sym :: (Heyting a) => a -> a -> a
-x `sym` y = (x \\ y) \/ (y \\ x)
 
 interWild :: Branches -> Wild -> Branches
 interWild _ None = bottom
@@ -295,23 +305,30 @@ vvv = cofinite [2, 3, 4]
 -- Pretty-printing
 ---------------------------------------------------
 instance PrettyShow Relation where
-  pshow (R {wild = None, branches = B xs}) | null xs = "Ø"
-  -- pshow (R {branches = End}) = "U"
-  pshow (R {wild = w, branches = B xs}) = "{" ++ elmArrs ++ pshow w ++ "}"
-    where
-      kvs = IntMap.assocs xs
-      elmArrs = intercalate ", " $ map (\(x, y) -> pshow x ++ " -> " ++ pshow y) kvs
+  pshow r
+    | isEmpty r = "Ø"
+    | isUniv r = "U"
+    | otherwise = "{" <> pshow (branches r) <> ", " <> pshow (wild r) <> "}"
+
+-- pshow (R {wild = None, branches = B xs}) | null xs = "Ø"
+-- -- pshow (R {branches = End}) = "U"
+-- pshow (R {wild = w, branches = B xs}) = "{" ++ elmArrs ++ "," <> pshow w ++ "}"
+--   where
+--     kvs = IntMap.assocs xs
+--     elmArrs = intercalate ", " $ map (\(x, y) -> pshow x ++ " -> " ++ pshow y) kvs
 
 -- TODO
 
-instance PrettyShow (Wild) where
-  pshow None = ""
-  pshow Univ = "U"
-  pshow (W a) = ", * -> " ++ pshow a
+instance PrettyShow Wild where
+  pshow w =
+    "* -> " <> case w of
+      None -> "Ø"
+      Univ -> "U"
+      W a -> pshow a
 
-instance PrettyShow (Branches) where
+instance PrettyShow Branches where
   -- pshow End = "U"
-  pshow (B x) = pshow x
+  pshow (B x) = intercalate ", " $ IntMap.assocs x <&> (\(k, r) -> pshow k <> " -> " <> pshow r)
 
 ---------------------------------------------------
 -- For testing
