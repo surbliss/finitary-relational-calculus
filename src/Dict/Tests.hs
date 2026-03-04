@@ -1,12 +1,8 @@
--- TODO: Find better solution than removing this warning...
-{-# OPTIONS_GHC -Wno-orphans #-}
-
-module Dict.Tests where
+module Dict.Tests (tests) where
 
 import Algebra.Heyting
 import Algebra.Lattice
 import Dict.Algebra
-import PrettyShow
 import Test.QuickCheck hiding ((><))
 import Test.Tasty (TestTree, testGroup)
 
@@ -18,57 +14,31 @@ import Test.Tasty.QuickCheck (testProperty)
 ---------------------------------------------------
 -- Generation of relations
 ---------------------------------------------------
-checkEq :: Relation -> Relation -> Property
-checkEq lhs rhs =
+detailedEq :: Relation -> Relation -> Property
+detailedEq lhs rhs =
   counterexample
-    ( "Pretty:\nLHS: "
-        ++ pshow lhs
-        ++ "\nRHS: "
-        ++ pshow rhs
-        ++ "\nNormal:\nLHS: "
-        ++ show lhs
-        ++ "\nRHS: "
-        ++ show rhs
+    ( show (branches lhs)
+        ++ show (wild lhs)
+        ++ show (dim lhs)
+        ++ "\n"
+        ++ show (branches rhs)
+        ++ show (wild rhs)
+        ++ show (dim rhs)
     )
-    $ property (lhs `dictEq` rhs)
-
-genPair :: Gen (Relation, Relation)
-genPair = do
-  n <- chooseInt (0, 5)
-  x <- genRel n
-  y <- genRel n
-  pure (x, y)
-
-genTriple :: Gen (Relation, Relation, Relation)
-genTriple = do
-  n <- chooseInt (0, 5)
-  x <- genRel n
-  y <- genRel n
-  z <- genRel n
-  pure (x, y, z)
+    $ property
+    $ lhs `eq` rhs
 
 prop_eqSelf :: Relation -> Property
-prop_eqSelf d = checkEq d d
+prop_eqSelf d = d === d
 
-prop_interComm :: Property
-prop_interComm = forAll genPair $ \(x, y) -> checkEq (x /\ y) (y /\ x)
+prop_pairSameDim :: Relation2 -> Property
+prop_pairSameDim (Rel2 (x, y)) = dim x === dim y
 
--- prop_normalizeEq :: Relation -> Property
--- prop_normalizeEq d = checkEq d (normalize d)
+prop_tripleSameDim :: Relation3 -> Property
+prop_tripleSameDim (Rel3 (x, y, z)) = dim x === dim y .&&. dim y == dim z
 
-allEqual :: (Eq a) => [a] -> Bool
-allEqual [] = True
-allEqual (x : xs) = all (== x) xs
-
--- prop_depthConstant :: Relation -> Bool
--- prop_depthConstant d = allEqual $ depthsAll d
-
--- prop_prodAddDepths :: Relation -> Relation -> Property
--- prop_prodAddDepths x y = (depth x + depth y) === depth (x >< y)
-
--- prop_dimElemsWildEq :: Relation -> Bool
--- prop_dimElemsWildEq (R {branches = xs, wild = Bottom}) = IntMap.null xs
--- prop_dimElemsWildEq (R {wild = Lift w, branches = xs}) = all prop_dimElemsWildEq xs || prop_dimElemsWildEq w || allEqual ((depthsAll `concatMap` IntMap.elems xs) ++ (depthsAll w))
+prop_interComm :: Relation2 -> Property
+prop_interComm (Rel2 (x, y)) = (x /\ y) `detailedEq` (y /\ x)
 
 prop_noEmptyBranches :: Relation -> Bool
 prop_noEmptyBranches r = isEmpty r || hasNoEmpty r
@@ -76,34 +46,114 @@ prop_noEmptyBranches r = isEmpty r || hasNoEmpty r
 prop_noEmptyBranchesBin :: (Relation -> Relation -> Relation) -> Relation -> Relation -> Bool
 prop_noEmptyBranchesBin f r s = prop_noEmptyBranches (r `f` s)
 
+--- 1-dim rules, but should also hold in multi-dim:
+prop_13 :: Relation2 -> Property
+prop_13 (Rel2 (x, y)) = (x \/ neg y) === neg (y \\ x)
+prop_14 :: Relation2 -> Property
+prop_14 (Rel2 (x, y)) = (neg x \/ y) === neg (x \\ y)
+prop_15 :: Relation2 -> Property
+prop_15 (Rel2 (x, y)) = (neg x \/ neg y) === neg (x /\ y)
+prop_16 :: Relation2 -> Property
+prop_16 (Rel2 (x, y)) = (x /\ neg y) === x \\ y
+prop_17 :: Relation2 -> Property
+prop_17 (Rel2 (x, y)) = (neg x /\ y) === y \\ x
+prop_18 :: Relation2 -> Property
+prop_18 (Rel2 (x, y)) = (neg x /\ neg y) === neg (x \/ y)
+
+-- Prop 19 is same as prop 20
 --- Complements
 prop_20 :: Relation -> Property
-prop_20 d = checkEq d $ (neg . neg) d
+prop_20 d = d === neg (neg d)
 
-prop_21 :: Property
-prop_21 = forAll genPair $ \(x, y) -> counterexample (pshow x ++ "\n" ++ pshow y ++ "\n") $ checkEq (neg (x /\ y)) (neg x \/ neg y)
+prop_21 :: Relation2 -> Property
+prop_21 (Rel2 (x, y)) = neg (x /\ y) === neg x \/ neg y
+
+prop_22 :: Relation -> Relation -> Property
+prop_22 x y = neg (x >< y) === ((neg x >< top {dim = dim y}) \/ (top {dim = dim x} >< neg y))
+
+prop_23 :: Relation2 -> Property
+prop_23 (Rel2 (x, y)) = neg (x \/ y) === neg x /\ neg y
+
+prop_24 :: Relation -> Property
+prop_24 x = (x /\ bottom {dim = dim x}) === bottom {dim = dim x}
+
+prop_25 :: Relation -> Property
+prop_25 x = (bottom {dim = dim x} /\ x) === bottom {dim = dim x}
+
+prop_26 :: Relation -> Property
+prop_26 x = x /\ top {dim = dim x} === x
+
+prop_27 :: Relation -> Property
+prop_27 x = (top {dim = dim x} /\ x) === x
+
+prop_28 :: Relation3 -> Property
+prop_28 (Rel3 (x, y, z)) = (x /\ (y \/ z)) === ((x /\ y) \/ (x /\ z))
+
+-- prop_30
+-- prop_31
+-- prop_32
+
+--- Couterexample:
+-- (28):                   FAIL (0.04s)
+--      *** Failed! Falsified (after 9 tests and 15 shrinks):
+--      Rel3 ({5},{, * -> {, * -> {7}}},{, * -> {8 -> {-7, 7}}})
+--      {5 -> {8 -> {-7}, * -> {7}}} /= {5 -> {8 -> {-7, 7}}}
+--      Use --quickcheck-replay="(SMGen 6982499325617234579 14420437858484944245,8)" to reproduce.
+--      Use -p '/(28)/' to rerun this test only.
+--    (29):                   FAIL (0.07s)
+--      *** Failed! Falsified (after 2 tests and 21 shrinks):
+--      Rel3 ({, * -> {-1}},{1},{, * -> {, * -> {1}}})
+--      {1 -> {-1 -> {1}, * -> {1}}, * -> {-1 -> {1}}} /= {, * -> {-1 -> {1}}}
+--      Use --quickcheck-replay="(SMGen 6134009087970008456 4260353227498352113,1)" to reproduce.
+--      Use -p '/(29)/' to rerun this test only.
+
+prop_29 :: Relation3 -> Property
+prop_29 (Rel3 (x, y, z)) = ((x \/ y) /\ z) === ((x /\ z) \/ (y /\ z))
+
+--- Also: For these, they don't all need to be same dim, so consider writing some new product-specific ones.
+prop_30 :: Relation2 -> Relation2 -> Property
+prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
+
+prop_31 :: Relation -> Relation2 -> Property
+prop_31 c (Rel2 (d, e)) = c >< (d \/ e) === (c >< d) \/ (c >< e)
+
+prop_32 :: Relation2 -> Relation -> Property
+prop_32 (Rel2 (c, d)) e = (c \/ d) >< e === (c >< e) \/ (d >< e)
 
 propertyTests :: TestTree
 propertyTests =
   testGroup
     "Dict property-tests"
     [ testProperty "eqSelf" prop_eqSelf
-    , -- , testProperty "constant depth" prop_depthConstant
-      testProperty "intersect commutative" prop_interComm
+    , testProperty "intersect commutative" prop_interComm
+    , testProperty "(13)" prop_13
+    , testProperty "(14)" prop_14
+    , testProperty "(15)" prop_15
+    , testProperty "(16)" prop_16
+    , testProperty "(17)" prop_17
+    , testProperty "(18)" prop_18
     , testProperty "(20) Double complement" prop_20
     , testProperty "(21)" prop_21
-    , -- , testProperty "normalize does nothing" prop_normalizeEq
-      -- , testProperty "Prod adds depths" prop_prodAddDepths
-      -- , testProperty "Dim of elems and wild match" prop_dimElemsWildEq
-      testProperty "No empty plain" prop_noEmptyBranches
+    , testProperty "(22)" prop_22
+    , testProperty "(23)" prop_23
+    , testProperty "(24)" prop_24
+    , testProperty "(25)" prop_25
+    , testProperty "(26)" prop_26
+    , testProperty "(27)" prop_27
+    , testProperty "(28)" prop_28
+    , testProperty "(29)" prop_29
+    , testProperty "(30)" prop_30
+    , testProperty "(31)" prop_31
+    , testProperty "(32)" prop_32
+    , testProperty "No empty plain" prop_noEmptyBranches
     , testProperty "No empty neg" (prop_noEmptyBranches . neg)
     , testProperty "No empty inter" (prop_noEmptyBranchesBin (/\))
     , testProperty "No empty union" (prop_noEmptyBranchesBin (\/))
     , testProperty "No empty diff" (prop_noEmptyBranchesBin (\\))
-    , testProperty "No empty sym" (prop_noEmptyBranchesBin sym)
-    -- , testProperty "No empty union" (prop_noEmptyBranchesUnion)
-    -- , testProperty "No empty diff" (prop_noEmptyBranchesDiff)
-    -- , testProperty "No empty sym" (prop_noEmptyBranchesSym)
+    , testProperty "No empty sym" (prop_noEmptyBranchesBin sym) --
+    --- Dimensions
+    , testProperty "Pair same dim" $ prop_pairSameDim
+    , testProperty "Triple same dim" $ prop_tripleSameDim
     ]
 
 fin :: [Int] -> Relation
