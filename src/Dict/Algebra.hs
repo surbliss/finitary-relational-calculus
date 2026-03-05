@@ -162,6 +162,23 @@ instance BoundedJoinSemiLattice (Relation) where
 instance BoundedMeetSemiLattice (Relation) where
   top = R {branches = bottom, wild = top, depth = 0}
 
+projLast :: Relation -> Relation
+projLast R {depth = 0} = bottom
+projLast r@R {depth = 1}
+  | isEmpty r = bottom
+  | otherwise = top
+projLast r@R {branches = B xs, depth = n} =
+  r
+    { branches = B (projLast <$> xs)
+    , wild = newWild
+    , depth = n - 1
+    }
+  where
+    newWild = case wild r of
+      None -> None
+      Univ -> Univ
+      W w -> W (projLast w)
+
 emptyN :: Nat -> Relation
 emptyN n | n < 0 = error "Negative dimension for emptyN"
 emptyN n = R {branches = B IntMap.empty, wild = None, depth = n}
@@ -245,6 +262,9 @@ pairs :: [(Int, Int)] -> Relation
 pairs xs = R {depth = 2, wild = None, branches = B $ IntMap.fromListWith (\/) $ map mkRelation xs}
   where
     mkRelation (x, y) = (x, (finite y))
+
+triples :: [(Int, Int, Int)] -> Relation
+triples = undefined
 
 ---------------------------------------------------
 -- Testing help
