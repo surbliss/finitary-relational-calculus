@@ -19,23 +19,26 @@ detailedEq lhs rhs =
   counterexample
     ( show (branches lhs)
         ++ show (wild lhs)
-        ++ show (dim lhs)
+        ++ show (depth lhs)
         ++ "\n"
         ++ show (branches rhs)
         ++ show (wild rhs)
-        ++ show (dim rhs)
+        ++ show (depth rhs)
     )
     $ property
     $ lhs `eq` rhs
+
+prop_genSimplified :: Relation -> Property
+prop_genSimplified r = r === simplify r
 
 prop_eqSelf :: Relation -> Property
 prop_eqSelf d = d === d
 
 prop_pairSameDim :: Relation2 -> Property
-prop_pairSameDim (Rel2 (x, y)) = dim x === dim y
+prop_pairSameDim (Rel2 (x, y)) = depth x === depth y
 
 prop_tripleSameDim :: Relation3 -> Property
-prop_tripleSameDim (Rel3 (x, y, z)) = dim x === dim y .&&. dim y == dim z
+prop_tripleSameDim (Rel3 (x, y, z)) = depth x === depth y .&&. depth y == depth z
 
 prop_interComm :: Relation2 -> Property
 prop_interComm (Rel2 (x, y)) = (x /\ y) `detailedEq` (y /\ x)
@@ -69,22 +72,22 @@ prop_21 :: Relation2 -> Property
 prop_21 (Rel2 (x, y)) = neg (x /\ y) === neg x \/ neg y
 
 prop_22 :: Relation -> Relation -> Property
-prop_22 x y = neg (x >< y) === ((neg x >< top {dim = dim y}) \/ (top {dim = dim x} >< neg y))
+prop_22 x y = neg (x >< y) === ((neg x >< univN (depth y)) \/ (univN (depth x) >< neg y))
 
 prop_23 :: Relation2 -> Property
 prop_23 (Rel2 (x, y)) = neg (x \/ y) === neg x /\ neg y
 
 prop_24 :: Relation -> Property
-prop_24 x = (x /\ bottom {dim = dim x}) === bottom {dim = dim x}
+prop_24 x = (x /\ emptyN (depth x)) === emptyN (depth x)
 
 prop_25 :: Relation -> Property
-prop_25 x = (bottom {dim = dim x} /\ x) === bottom {dim = dim x}
+prop_25 x = (emptyN (depth x)) /\ x === emptyN (depth x)
 
 prop_26 :: Relation -> Property
-prop_26 x = x /\ top {dim = dim x} === x
+prop_26 x = x /\ univN (depth x) === x
 
 prop_27 :: Relation -> Property
-prop_27 x = (top {dim = dim x} /\ x) === x
+prop_27 x = (univN (depth x) /\ x) === x
 
 prop_28 :: Relation3 -> Property
 prop_28 (Rel3 (x, y, z)) = (x /\ (y \/ z)) === ((x /\ y) \/ (x /\ z))
@@ -110,15 +113,18 @@ prop_28 (Rel3 (x, y, z)) = (x /\ (y \/ z)) === ((x /\ y) \/ (x /\ z))
 prop_29 :: Relation3 -> Property
 prop_29 (Rel3 (x, y, z)) = ((x \/ y) /\ z) === ((x /\ z) \/ (y /\ z))
 
+time :: (Testable prop) => Int -> prop -> Property
+time k = within $ k * 1000000
+
 --- Also: For these, they don't all need to be same dim, so consider writing some new product-specific ones.
 prop_30 :: Relation2 -> Relation2 -> Property
-prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
+prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = time 1 $ (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
 
 prop_31 :: Relation -> Relation2 -> Property
-prop_31 c (Rel2 (d, e)) = c >< (d \/ e) === (c >< d) \/ (c >< e)
+prop_31 c (Rel2 (d, e)) = withMaxSuccess 100 $ time 1 $ c >< (d \/ e) === (c >< d) \/ (c >< e)
 
 prop_32 :: Relation2 -> Relation -> Property
-prop_32 (Rel2 (c, d)) e = (c \/ d) >< e === (c >< e) \/ (d >< e)
+prop_32 (Rel2 (c, d)) e = withMaxSuccess 100 $ time 1 $ (c \/ d) >< e === (c >< e) \/ (d >< e)
 
 propertyTests :: TestTree
 propertyTests =
@@ -153,7 +159,9 @@ propertyTests =
     , testProperty "No empty sym" (prop_noEmptyBranchesBin sym) --
     --- Dimensions
     , testProperty "Pair same dim" $ prop_pairSameDim
-    , testProperty "Triple same dim" $ prop_tripleSameDim
+    , testProperty "Triple same dim" $ prop_tripleSameDim --
+    --- Generators
+    , testProperty "Gens simplified" $ prop_genSimplified
     ]
 
 fin :: [Int] -> Relation

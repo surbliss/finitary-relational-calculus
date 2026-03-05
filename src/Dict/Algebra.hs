@@ -21,7 +21,7 @@ data Relation
   = R
   { wild :: Wild
   , branches :: Branches
-  , dim :: Nat
+  , depth :: Nat -- To avoid traversing, when converting to None
   }
   deriving (Eq, Ord)
 
@@ -39,12 +39,11 @@ class Simplifiable a where
   simplify :: a -> a
 
 instance Simplifiable Wild where
-  simplify None = bottom
-  simplify Univ = top
-  simplify (W r)
-    | isEmpty r = bottom
-    | isUniv r = top
-    | otherwise = W r
+  simplify None = None
+  simplify Univ = Univ
+  simplify (W R {branches = B xs, wild = None})
+    | IntMap.null xs = None
+  simplify (W r) = W r -- Keep W Univ!
 
 instance Simplifiable Branches where
   simplify (B xs) = B $ IntMap.filter (not . isEmpty) xs
@@ -59,7 +58,10 @@ isEmpty _ = False
 
 -- Same here
 isUniv :: Relation -> Bool
-isUniv R {branches = B xs, wild = Univ} = IntMap.null xs
+isUniv R {branches = B xs, wild = Univ, depth = n} =
+  assert
+    (n == 0 && IntMap.null xs)
+    True
 isUniv _ = False
 
 ---------------------------------------------------
@@ -111,9 +113,7 @@ instance Lattice Wild where
   x \/ None = x
   Univ \/ _ = Univ
   _ \/ Univ = Univ
-  W w \/ W v = W $ case w \/ v of
-    r | isUniv r -> r {branches = bottom, wild = top} -- not plain 'top' so dimension is kept
-    r -> r
+  W w \/ W v = W $ w \/ v
 
 instance Lattice Relation where
   r /\ s = r {branches = resBranches, wild = resWild}
@@ -148,31 +148,38 @@ instance Heyting (Wild) where
     r -> W r
 instance Heyting (Relation) where
   x ==> y = neg x \/ y
+  neg R {branches = B xs, wild = None, depth = 0} = assert (IntMap.null xs) top
+  neg r@R {wild = None, depth = n} = r {wild = W (univN (n - 1))}
   neg r = r {wild = neg (wild r)}
 
 -- r@R {branches = xs, wild = None, dim = n} \/ R {branches = ys, wild = None} = r {branches = xs \/ ys, wild = None, dim = n}
 -- x \/ y = undefined
 
 instance BoundedJoinSemiLattice (Relation) where
-  bottom = R {branches = bottom, wild = bottom, dim = 0}
+  -- _Mathematically_ depth 0 would probably be more appropriate here, but it would never be able to be used, as we should only intersect/union things of same dim.
+  bottom = R {branches = bottom, wild = bottom, depth = 0}
 
 instance BoundedMeetSemiLattice (Relation) where
-  top = R {branches = bottom, wild = top, dim = 0}
+  top = R {branches = bottom, wild = top, depth = 0}
 
--- case wild r of
---   None -> r {wild = top}
---   W x | x == top -> r {wild = bottom}
---   W x -> r {wild = W $ neg x}
+emptyN :: Nat -> Relation
+emptyN n | n < 0 = error "Negative dimension for emptyN"
+emptyN n = R {branches = B IntMap.empty, wild = None, depth = n}
+
+univN :: Nat -> Relation
+univN n | n < 0 = error "Negative dimension for univN"
+univN 0 = top
+univN n = R {branches = B IntMap.empty, wild = W (univN (n - 1)), depth = n}
 
 interWild :: Branches -> Wild -> Branches
 interWild _ None = bottom
 interWild x Univ = x
-interWild (B xs) (W w) = B $ (IntMap.mapMaybe (`interMaybe` w) xs)
-  where
-    x `interMaybe` y = properRel $ x /\ y
-    properRel R {branches = B ys}
-      | null ys = Nothing
-    properRel r = Just r
+interWild (B xs) (W w) = B $ (IntMap.map (/\ w) xs)
+
+-- where
+--   x `interMaybe` y = properRel $ x /\ y
+--   properRel R {branches = B ys} | IntMap.null ys = Nothing
+--   properRel r = Just r
 
 mapWild :: (Relation -> Relation) -> Wild -> Wild
 mapWild _ None = None
@@ -182,14 +189,21 @@ mapWild f (W w) = simplify $ W (f w)
 mapBranches :: (Relation -> Relation) -> Branches -> Branches
 mapBranches f (B xs) = simplify $ B $ f <$> xs
 
---- Cartesial product
-(><) :: Relation -> Relation -> Relation
-r >< s
-  | isEmpty r = r {dim = dim r + dim s}
-  | isEmpty s = s {dim = dim r + dim s}
-  | dim r == 0 && isUniv r = s
-  | isUniv r = case wild r of {}
-  | otherwise = r {branches = mapBranches (>< s) (branches r), wild = mapWild (>< s) (wild r), dim = dim r + dim s}
+class Extendable a where
+  (><) :: a -> Relation -> a
+
+instance Extendable Branches where
+  B xs >< r = simplify $ B $ xs <&> (>< r)
+
+instance Extendable Relation where
+  r >< s | isEmpty r || isEmpty s = emptyN (depth r + depth s)
+  R {branches = B xs, wild = Univ, depth = n} >< s =
+    assert (IntMap.null xs && n == 0) $
+      s
+  r >< s = case (wild r) of
+    None -> r {branches = branches r >< s, depth = depth r + depth s}
+    W w -> r {branches = branches r >< s, wild = W (w >< s), depth = depth r + depth s}
+    Univ -> error "Should not be possible to have Univ here"
 
 --- For retrieving
 data Val = V Key | S deriving (Eq, Ord)
@@ -221,14 +235,14 @@ instance ToIntSet Integer where
 -- Interface for interacting with Dicts
 ---------------------------------------------------
 finite :: (ToIntSet a) => a -> (Relation)
-finite x = R {wild = bottom, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
+finite x = R {wild = bottom, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), depth = 1}
 
 cofinite :: (ToIntSet a) => a -> (Relation)
-cofinite x = R {wild = top, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), dim = 1}
+cofinite x = R {wild = W top, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), depth = 1}
 
 --- Finite pairs
 pairs :: [(Int, Int)] -> Relation
-pairs xs = R {dim = 2, wild = None, branches = B $ IntMap.fromList $ map mkRelation xs}
+pairs xs = R {depth = 2, wild = None, branches = B $ IntMap.fromListWith (\/) $ map mkRelation xs}
   where
     mkRelation (x, y) = (x, (finite y))
 
@@ -256,6 +270,14 @@ r `eq` s = sortNub (tries r) == sortNub (tries s)
 uuu :: (Relation)
 uuu = finite [1, 2, 3]
 vvv :: (Relation)
+xxx :: Relation
+xxx = uuu
+yyy :: Relation
+yyy = finite [2, 3, 4]
+xss :: IntMap Relation
+B xss = branches xxx
+yss :: IntMap Relation
+B yss = branches yyy
 vvv = cofinite [2, 3, 4]
 
 ---------------------------------------------------
@@ -263,9 +285,16 @@ vvv = cofinite [2, 3, 4]
 ---------------------------------------------------
 instance PrettyShow Relation where
   pshow r
-    | isUniv r = "U"
-    | isEmpty r = "Ø"
-    | otherwise = "{" <> pshow (branches r) <> pshow (wild r) <> "}"
+    | isUniv r = "U" -- Always dim 1
+    | isEmpty r = "Ø-" <> show (depth r)
+    | otherwise = "{" <> intercalate ", " pretties <> "}"
+    where
+      pretties = prettyBranches (branches r) <> prettyWild (wild r)
+      prettyBranches (B xs) = xs & IntMap.toList <&> prettyMap
+      prettyMap (k, v) = pshow k <> " -> " <> pshow v
+      prettyWild None = []
+      prettyWild Univ = ["* -> U"]
+      prettyWild (W w) = ["* -> " <> pshow w]
 
 instance PrettyShow Wild where
   pshow w = case w of
@@ -278,9 +307,7 @@ instance PrettyShow Branches where
   pshow (B x) =
     intercalate ", " $
       IntMap.assocs x
-        <&> ( \(k, r) ->
-                if isUniv r then pshow k else pshow k <> " -> " <> pshow r
-            )
+        <&> (\(k, r) -> pshow k <> " -> " <> pshow r)
 
 ---------------------------------------------------
 -- For testing
@@ -333,27 +360,29 @@ instance Arbitrary Relation3 where
 --- Generator functions
 -- For generator: n > 0 should always produce something non-empty!
 genWild :: Int -> Gen Wild
-genWild 1 = pure top
+genWild n | n < 1 = error "<1 genBranches "
+genWild 0 = pure top
 genWild n = do
   r <- genRelation (n - 1)
   pure $ simplify $ W r
 
 genBranches :: Int -> Gen Branches
-genBranches n = do
-  numKeys <- chooseInt (1, 5)
-  ps <- replicateM numKeys $ do
-    k <- arbitrary
-    v <- case n of
-      0 -> error "Too small branch n"
-      1 -> pure top
-      _ -> genRelation (n - 1)
-    pure (k, v)
-  pure $ simplify $ B $ IntMap.fromList ps
+genBranches n
+  | n < 1 = error "<1 genBranches"
+  | otherwise = do
+      numKeys <- chooseInt (1, 5)
+      ps <- replicateM numKeys $ do
+        k <- arbitrary
+        v <- case n of
+          0 -> error "Too small branch n"
+          1 -> pure top
+          _ -> genRelation (n - 1)
+        pure (k, v)
+      pure $ simplify $ B $ IntMap.fromList ps
 
-genRelationScaled :: Int -> Gen Relation
-genRelationScaled n = genRelation (n `mod` 15)
-
+--- Only generate non-empty? Maybe?
 genRelation :: Int -> Gen Relation
+genRelation n | n < 0 = error "Non-positive dim"
 genRelation 0 = oneof [pure bottom, pure top]
 genRelation n = do
   (xs, w) <-
@@ -362,7 +391,7 @@ genRelation n = do
       , (,) <$> pure bottom <*> genWild n
       , (,) <$> genBranches n <*> genWild n
       ]
-  pure $ simplify R {branches = xs, wild = w, dim = fromIntegral n}
+  pure $ simplify R {branches = xs, wild = w, depth = fromIntegral n}
 
 --- Shrinking functions
 shrinkWild :: Wild -> [Wild]
@@ -381,7 +410,8 @@ shrinkBranches :: Branches -> [Branches]
 shrinkBranches (B xs) = deleteKey
   where
     deleteKey = [B (IntMap.delete x xs) | x <- IntMap.keys xs]
-    shrinkKeys = [B (IntMap.insert x (simplify v') xs) | (x, v) <- IntMap.assocs xs, v' <- shrinkRelSameDim v]
+
+-- shrinkKeys = [B (IntMap.insert x (simplify v') xs) | (x, v) <- IntMap.assocs xs, v' <- shrinkRelSameDim v]
 
 -- shrinkVal = [B $ IntMap.insert k v' xs | (k, v) <- IntMap.assocs xs, v' <- shrink v, not (isEmpty v')]
 
@@ -396,12 +426,13 @@ shrinkRelSameDim r = branchShrinks <> wildShrinks
       pure r {wild = w}
 
 shrinkRelDecreaseDim :: Relation -> [Relation]
-shrinkRelDecreaseDim R {dim = 0} = []
-shrinkRelDecreaseDim R {dim = 1} = [bottom, top]
-shrinkRelDecreaseDim r
-  | isUniv r || isEmpty r = [r {dim = dim r - 1}]
-shrinkRelDecreaseDim r = nextWild <> nextBranches <> [cutLastDim r]
+shrinkRelDecreaseDim R {depth = 0} = []
+shrinkRelDecreaseDim R {depth = 1} = [bottom, top]
+shrinkRelDecreaseDim r | isEmpty r = [r {depth = depth r - 1}]
+shrinkRelDecreaseDim r = nextWild <> nextBranches
   where
+    -- <> [cutLastDim r]
+
     B xs = branches r
     nextBranches = IntMap.elems xs
     nextWild = case wild r of
@@ -409,20 +440,20 @@ shrinkRelDecreaseDim r = nextWild <> nextBranches <> [cutLastDim r]
       Univ -> []
       W w -> [w]
 
-cutLastDim :: Relation -> Relation
-cutLastDim R {dim = 0} = error "Don't cut last dim of dim 0 pls"
-cutLastDim r@R {dim = 1}
-  | isEmpty r = bottom
-  | otherwise = top
-cutLastDim r@R {branches = B xs, dim = n} = case wild r of
-  None -> r {branches = simplify $ B $ cutLastDim <$> xs, dim = n - 1}
-  Univ -> r {branches = simplify $ B $ cutLastDim <$> xs, dim = n - 1}
-  W w ->
-    r
-      { branches = simplify $ B $ cutLastDim <$> xs
-      , wild = simplify $ W $ cutLastDim w
-      , dim = n - 1
-      }
+-- cutLastDim :: Relation -> Relation
+-- cutLastDim R {depth = 0} = error "Don't cut last dim of dim 0 pls"
+-- cutLastDim r@R {depth = 1}
+--   | isEmpty r = bottom
+--   | otherwise = top
+-- cutLastDim r@R {branches = B xs, depth = n} = case wild r of
+--   None -> r {branches = simplify $ B $ cutLastDim <$> xs, depth = n - 1}
+--   Univ -> r {branches = simplify $ B $ cutLastDim <$> xs, depth = n - 1}
+--   W w ->
+--     r
+--       { branches = simplify $ B $ cutLastDim <$> xs
+--       , wild = simplify $ W $ cutLastDim w
+--       , depth = n - 1
+--       }
 
 ---------------------------------------------------
 -- Functions for tests
