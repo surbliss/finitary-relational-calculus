@@ -8,7 +8,7 @@ import Algebra.Lattice
 import Control.Exception (assert)
 import Data.IntMap.Strict qualified as IntMap
 import PrettyShow
-import Test.QuickCheck hiding ((><))
+import Test.QuickCheck hiding (getSize, (><))
 import Text.Show qualified
 
 default (Int)
@@ -22,6 +22,7 @@ data Relation
   { wild :: Wild
   , branches :: Branches
   , depth :: Nat -- To avoid traversing, when converting to None
+  , size :: Nat -- number of keys
   }
   deriving (Eq, Ord)
 
@@ -67,6 +68,8 @@ isUniv _ = False
 ---------------------------------------------------
 -- Bonus-classes
 ---------------------------------------------------
+updateSize :: Relation -> Relation
+updateSize r = r {size = getSize (branches r)}
 class SymDiff a where
   (\\) :: a -> a -> a
   sym :: a -> a -> a
@@ -116,11 +119,46 @@ instance Lattice Wild where
   W w \/ W v = W $ w \/ v
 
 instance Lattice Relation where
-  r /\ s = r {branches = resBranches, wild = resWild}
+  -- Optimization: If both wildcards are empty, then only iterate over the
+  -- set with the fewest number of keys.
+  r@R {wild = None} /\ s@R {wild = None} = r {branches = resBranches, size = getSize resBranches}
     where
-      resWild = wild r /\ wild s
+      -- x: smallest of the relations
+      (rmin, smax) = if size r < size s then (r, s) else (s, r)
+      B bx = branches rmin
+      B by = branches smax
+      updateBranch :: Key -> Relation -> Relation
+      updateBranch x rx = case IntMap.lookup x by of
+        Nothing -> bottom
+        Just sy -> (rx /\ sy)
+      resBranches = simplify $ B $ IntMap.mapWithKey updateBranch bx
+  r@R {wild = None} /\ s = r {branches = resBranches, size = getSize resBranches}
+    where
+      B bx = branches r
+      B by = branches s
+      updateBranch :: Key -> Relation -> Relation
+      updateBranch x rx = case IntMap.lookup x by of
+        Nothing -> case (wild s) of
+          None -> error "Should be handled by case above"
+          Univ -> rx
+          W w -> rx /\ w
+        Just sy -> rx /\ (sy `symWild` (wild s))
+      resBranches = simplify $ B $ IntMap.mapWithKey updateBranch bx
+  r /\ s@R {wild = None} = s {branches = resBranches, size = getSize resBranches}
+    where
+      B bx = branches r
+      B by = branches s
+      updateBranch :: Key -> Relation -> Relation
+      updateBranch y ry = case IntMap.lookup y bx of
+        Nothing -> case (wild r) of
+          None -> error "Should be handled by case above"
+          Univ -> ry
+          W w -> ry /\ w
+        Just rx -> (rx `symWild` wild r) /\ ry
+      resBranches = simplify $ B $ IntMap.mapWithKey updateBranch by
+  r /\ s = simplify $ r {branches = resBranches, wild = wild r /\ wild s, size = getSize resBranches}
+    where
       resBranches =
-        -- trace (show r <> "\n" <> show s) $
         (branches r /\ branches s)
           `sym` (branches r `interWild` wild s)
           `sym` (branches s `interWild` wild r)
@@ -157,10 +195,10 @@ instance Heyting (Relation) where
 
 instance BoundedJoinSemiLattice (Relation) where
   -- _Mathematically_ depth 0 would probably be more appropriate here, but it would never be able to be used, as we should only intersect/union things of same dim.
-  bottom = R {branches = bottom, wild = bottom, depth = 0}
+  bottom = R {branches = bottom, wild = bottom, depth = 0, size = 0}
 
 instance BoundedMeetSemiLattice (Relation) where
-  top = R {branches = bottom, wild = top, depth = 0}
+  top = R {branches = bottom, wild = top, depth = 0, size = 0}
 
 projLast :: Relation -> Relation
 projLast R {depth = 0} = bottom
@@ -181,17 +219,22 @@ projLast r@R {branches = B xs, depth = n} =
 
 emptyN :: Nat -> Relation
 emptyN n | n < 0 = error "Negative dimension for emptyN"
-emptyN n = R {branches = B IntMap.empty, wild = None, depth = n}
+emptyN n = R {branches = B IntMap.empty, wild = None, depth = n, size = 0}
 
 univN :: Nat -> Relation
 univN n | n < 0 = error "Negative dimension for univN"
 univN 0 = top
-univN n = R {branches = B IntMap.empty, wild = W (univN (n - 1)), depth = n}
+univN n = R {branches = B IntMap.empty, wild = W (univN (n - 1)), depth = n, size = 0}
 
 interWild :: Branches -> Wild -> Branches
 interWild _ None = bottom
 interWild x Univ = x
 interWild (B xs) (W w) = B $ (IntMap.map (/\ w) xs)
+
+symWild :: Relation -> Wild -> Relation
+symWild r None = r
+symWild r Univ = neg r
+symWild r (W w) = r `sym` w
 
 -- where
 --   x `interMaybe` y = properRel $ x /\ y
@@ -248,20 +291,28 @@ instance ToIntSet Int where
 instance ToIntSet Integer where
   toSet = one . fromIntegral
 
+getSize :: Branches -> Nat
+getSize (B bs) = fromIntegral $ IntMap.size bs
+
 ---------------------------------------------------
 -- Interface for interacting with Dicts
 ---------------------------------------------------
 finite :: (ToIntSet a) => a -> (Relation)
-finite x = R {wild = bottom, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), depth = 1}
+finite x = R {wild = bottom, branches = bs, depth = 1, size = getSize bs}
+  where
+    bs = B $ IntMap.fromSet (\_ -> top :: Relation) (toSet x)
 
 cofinite :: (ToIntSet a) => a -> (Relation)
-cofinite x = R {wild = W top, branches = B (IntMap.fromSet (\_ -> top) (toSet x)), depth = 1}
+cofinite x = R {wild = W top, branches = bs, depth = 1, size = getSize bs}
+  where
+    bs = B $ IntMap.fromSet (\_ -> top :: Relation) (toSet x)
 
 --- Finite pairs
 pairs :: [(Int, Int)] -> Relation
-pairs xs = R {depth = 2, wild = None, branches = B $ IntMap.fromListWith (\/) $ map mkRelation xs}
+pairs xs = R {depth = 2, wild = None, branches = bs, size = getSize bs}
   where
     mkRelation (x, y) = (x, (finite y))
+    bs = B $ IntMap.fromListWith (\/) $ map mkRelation xs
 
 triples :: [(Int, Int, Int)] -> Relation
 triples = undefined
@@ -303,11 +354,13 @@ vvv = cofinite [2, 3, 4]
 ---------------------------------------------------
 -- Pretty-printing
 ---------------------------------------------------
+showSize :: Relation -> String
+showSize r = ", Size: " <> show (size r)
 instance PrettyShow Relation where
   pshow r
-    | isUniv r = "U" -- Always dim 1
-    | isEmpty r = "Ø-" <> show (depth r)
-    | otherwise = "{" <> intercalate ", " pretties <> "}"
+    | isUniv r = "U" ++ showSize r -- Always dim 1
+    | isEmpty r = "Ø-" <> show (depth r) ++ showSize r
+    | otherwise = "{" <> intercalate ", " pretties <> "}" ++ showSize r
     where
       pretties = prettyBranches (branches r) <> prettyWild (wild r)
       prettyBranches (B xs) = xs & IntMap.toList <&> prettyMap
@@ -411,7 +464,7 @@ genRelation n = do
       , (,) <$> pure bottom <*> genWild n
       , (,) <$> genBranches n <*> genWild n
       ]
-  pure $ simplify R {branches = xs, wild = w, depth = fromIntegral n}
+  pure $ simplify R {branches = xs, wild = w, depth = fromIntegral n, size = getSize xs}
 
 --- Shrinking functions
 shrinkWild :: Wild -> [Wild]
