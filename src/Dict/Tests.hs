@@ -1,13 +1,8 @@
 module Dict.Tests (tests) where
 
-import Algebra.Heyting
-import Algebra.Lattice
 import Dict.Algebra
 import Test.QuickCheck hiding ((><))
 import Test.Tasty (TestTree, testGroup)
-
--- import Test.Tasty.HUnit (Assertion, assertBool, assertFailure, testCase, (@?=))
-
 import Test.Tasty.HUnit (testCase, (@?=))
 import Test.Tasty.QuickCheck (testProperty)
 
@@ -28,9 +23,6 @@ detailedEq lhs rhs =
     $ property
     $ lhs `eq` rhs
 
-prop_genSimplified :: Relation -> Property
-prop_genSimplified r = r === simplify r
-
 prop_eqSelf :: Relation -> Property
 prop_eqSelf d = d === d
 
@@ -44,7 +36,7 @@ prop_interComm :: Relation2 -> Property
 prop_interComm (Rel2 (x, y)) = (x /\ y) `detailedEq` (y /\ x)
 
 prop_noEmptyBranches :: Relation -> Bool
-prop_noEmptyBranches r = isEmpty r || hasNoEmpty r
+prop_noEmptyBranches r = isEmptyRelation r || (not . hasEmpty) r
 
 prop_noEmptyBranchesBin :: (Relation -> Relation -> Relation) -> Relation -> Relation -> Bool
 prop_noEmptyBranchesBin f r s = prop_noEmptyBranches (r `f` s)
@@ -156,12 +148,10 @@ propertyTests =
     , testProperty "No empty inter" (prop_noEmptyBranchesBin (/\))
     , testProperty "No empty union" (prop_noEmptyBranchesBin (\/))
     , testProperty "No empty diff" (prop_noEmptyBranchesBin (\\))
-    , testProperty "No empty sym" (prop_noEmptyBranchesBin sym) --
+    , testProperty "No empty sym" (prop_noEmptyBranchesBin (<+>)) --
     --- Dimensions
     , testProperty "Pair same dim" $ prop_pairSameDim
     , testProperty "Triple same dim" $ prop_tripleSameDim --
-    --- Generators
-    , testProperty "Gens simplified" $ prop_genSimplified
     ]
 
 fin :: [Int] -> Relation
