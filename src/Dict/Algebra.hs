@@ -8,7 +8,7 @@ module Dict.Algebra where
 import Control.Exception (assert)
 import Data.IntMap.Strict qualified as IntMap
 import PrettyShow
-import Test.QuickCheck hiding (getSize, (><))
+import Test.QuickCheck hiding ((><))
 import Text.Show qualified
 
 type Key = Int
@@ -19,8 +19,8 @@ data Relation
   = R
   { wild :: Wild
   , branches :: Branches
-  , depth :: Nat -- To avoid traversing, when converting to None
-  , size :: Nat -- number of keys
+  , depth :: Int -- To avoid traversing, when converting to None
+  , count :: Int -- number of keys
   }
   deriving (Eq, Ord)
 
@@ -88,33 +88,31 @@ instance Negatable Wild where
 instance Algebra Relation where
   -- Optimization: If both wildcards are empty, then only iterate over the
   -- set with the fewest number of keys.
-  r@R {wild = None} /\ s@R {wild = None} = r {branches = resBranches, size = getSize resBranches}
+  r@R {wild = None} /\ s@R {wild = None} = r {branches = resBranches, count = getCount resBranches}
     where
       -- x: smallest of the relations
-      (rmin, smax) = if size r < size s then (r, s) else (s, r)
+      (rmin, smax) = if count r < count s then (r, s) else (s, r)
       updateBranch x rx = IntMap.lookup x (branches smax) <&> (rx /\) >>= nonEmptyRelation
       resBranches = IntMap.mapMaybeWithKey updateBranch (branches rmin)
-  r@R {wild = None} /\ s = r {branches = resBranches, size = getSize resBranches}
+  r@R {wild = None} /\ s = r {branches = resBranches, count = getCount resBranches}
     where
       updateBranch x rx = nonEmptyRelation $ case IntMap.lookup x (branches s) of
         Nothing -> case wild s of
           None -> error "Should be handled by case above"
           Univ -> rx
           W w -> rx /\ w
-        Just sy -> rx /\ (sy `symWild` (wild s))
+        Just sy -> rx /\ (sy `symWild` wild s)
       resBranches = IntMap.mapMaybeWithKey updateBranch (branches r)
-  r /\ s@R {wild = None} = s {branches = resBranches, size = getSize resBranches}
+  r /\ s@R {wild = None} = s {branches = resBranches, count = getCount resBranches}
     where
-      bx = branches r
-      by = branches s
-      updateBranch y ry = nonEmptyRelation $ case IntMap.lookup y bx of
+      updateBranch y sy = nonEmptyRelation $ case IntMap.lookup y (branches r) of
         Nothing -> case (wild r) of
           None -> error "Should be handled by case above"
-          Univ -> ry
-          W w -> ry /\ w
-        Just rx -> (rx `symWild` wild r) /\ ry
-      resBranches = IntMap.mapMaybeWithKey updateBranch by
-  r /\ s = r {branches = resBranches, wild = wild r /\ wild s, size = getSize resBranches}
+          Univ -> sy
+          W w -> w /\ sy
+        Just rx -> (rx `symWild` wild r) /\ sy
+      resBranches = IntMap.mapMaybeWithKey updateBranch (branches s)
+  r /\ s = r {branches = resBranches, wild = wild r /\ wild s, count = getCount resBranches}
     where
       resBranches =
         (branches r /\ branches s)
@@ -126,14 +124,14 @@ instance Algebra Relation where
   x <+> y = (x \\ y) \/ (y \\ x)
 
   x \\ y = x /\ neg y
-  empt = R {branches = empt, wild = empt, depth = 0, size = 0}
+  empt = R {branches = empt, wild = empt, depth = 0, count = 0}
 
 instance Negatable Relation where
   neg R {branches = xs, wild = None, depth = 0} = assert (IntMap.null xs) univ
   neg r@R {wild = None, depth = n} = r {wild = W (univN (n - 1))}
   neg r = r {wild = neg (wild r)}
 
-  univ = R {branches = empt, wild = univ, depth = 0, size = 0}
+  univ = R {branches = empt, wild = univ, depth = 0, count = 0}
 
 instance Extendable Branches where
   xs >< r
@@ -177,11 +175,11 @@ removeEmptyBranches :: Branches -> Branches
 removeEmptyBranches xs = IntMap.filter (not . isEmptyRelation) xs
 
 -- | Update the count of branches - use after op that might modify these
-getSize :: Branches -> Nat
-getSize bs = fromIntegral $ IntMap.size bs
+getCount :: Branches -> Int
+getCount bs = IntMap.size bs
 
-updateSize :: Relation -> Relation
-updateSize r = r {size = getSize (branches r)}
+updateCount :: Relation -> Relation
+updateCount r = r {count = getCount (branches r)}
 
 -- WRONG: Attempt at projection, but _wrong_: Projection over symmetric difference is
 -- more complicated than this
@@ -202,14 +200,14 @@ projLast r@R {branches = xs, depth = n} =
       Univ -> Univ
       W w -> W (projLast w)
 
-emptyN :: Nat -> Relation
+emptyN :: Int -> Relation
 emptyN n | n < 0 = error "Negative dimension for emptyN"
-emptyN n = R {branches = IntMap.empty, wild = None, depth = n, size = 0}
+emptyN n = R {branches = IntMap.empty, wild = None, depth = n, count = 0}
 
-univN :: Nat -> Relation
+univN :: Int -> Relation
 univN n | n < 0 = error "Negative dimension for univN"
 univN 0 = univ
-univN n = R {branches = IntMap.empty, wild = W (univN (n - 1)), depth = n, size = 0}
+univN n = R {branches = IntMap.empty, wild = W (univN (n - 1)), depth = n, count = 0}
 
 interWild :: Branches -> Wild -> Branches
 interWild _ None = empt
@@ -255,18 +253,18 @@ instance ToIntSet Integer where
 -- Interface for interacting with Dicts
 ---------------------------------------------------
 finite :: (ToIntSet a) => a -> (Relation)
-finite x = R {wild = empt, branches = bs, depth = 1, size = getSize bs}
+finite x = R {wild = empt, branches = bs, depth = 1, count = getCount bs}
   where
     bs = IntMap.fromSet (\_ -> univ :: Relation) (toSet x)
 
 cofinite :: (ToIntSet a) => a -> (Relation)
-cofinite x = R {wild = W univ, branches = bs, depth = 1, size = getSize bs}
+cofinite x = R {wild = W univ, branches = bs, depth = 1, count = getCount bs}
   where
     bs = IntMap.fromSet (\_ -> univ :: Relation) (toSet x)
 
 --- Finite pairs
 pairs :: [(Int, Int)] -> Relation
-pairs xs = R {depth = 2, wild = None, branches = bs, size = getSize bs}
+pairs xs = R {depth = 2, wild = None, branches = bs, count = getCount bs}
   where
     mkRelation (x, y) = (x, (finite y))
     bs = IntMap.fromListWith (\/) $ map mkRelation xs
@@ -277,8 +275,8 @@ triples xs = foldr (\/) (emptyN 3) [finite [x] >< finite [y] >< finite [z] | (x,
 ---------------------------------------------------
 -- Pretty-printing
 ---------------------------------------------------
-showSize :: Relation -> String
-showSize r = "|" <> show (size r) <> "|"
+showDetails :: Relation -> String
+showDetails r = "|" <> "c" <> show (count r) <> "," <> "d" <> show (depth r) <> "|"
 
 -- Same here
 isUniv :: Relation -> Bool
@@ -289,11 +287,9 @@ isUniv R {branches = xs, wild = Univ, depth = n} =
 isUniv _ = False
 instance PrettyShow Relation where
   pshow r
-    | isUniv r && size r /= 0 = "oh no, univ wrong size!" <> show (size r)
-    | isUniv r = "U" -- Always dim 1
-    | isEmptyRelation r && size r /= 0 = "oh no, empty wrong size!" <> show (size r)
-    | isEmptyRelation r = show (depth r) <> "Ø"
-    | otherwise = showSize r <> "{" <> intercalate ", " pretties <> "}"
+    | isUniv r = showDetails r <> "U"
+    | isEmptyRelation r = showDetails r <> "Ø"
+    | otherwise = showDetails r <> "{" <> intercalate ", " pretties <> "}"
     where
       pretties = prettyBranches (branches r) <> prettyWild (wild r)
       prettyBranches xs = xs & IntMap.toList <&> prettyMap
@@ -322,18 +318,39 @@ instance PrettyShow Branches where
 newtype Relation2 = Rel2 (Relation, Relation) deriving (Show, Eq, Ord)
 newtype Relation3 = Rel3 (Relation, Relation, Relation) deriving (Show, Eq, Ord)
 
+-- withLayersFixed :: Int -> Gen Relation
+-- withLayersFixed 0 = oneof [pure]
+-- genLayersFixed :: Gen (Gen Relation)
+-- genLayersFixed = sized $ \size -> pure $ case size of
+--   0 -> oneof [pure empt, pure univ]
+--   _ -> do
+--     layers <- choose (1, floor $ sqrt $ fromIntegral size)
+--     genRelation layers
+
+-- layersFixed :: Int -> Gen Relation
+-- layersFixed size = case size of
+--   0 -> oneof [pure empt, pure univ]
+--   _ -> do
+--     layers <- choose (1, floor $ sqrt $ fromIntegral size)
+--     genRelation layers
+
+getLayers :: Gen Int
+getLayers = sized $ \size -> case size of
+  0 -> pure 0
+  _ -> choose (1, floor $ sqrt $ fromIntegral size)
+
 instance Arbitrary (Relation) where
   arbitrary = do
-    n <- chooseInt (0, 5)
-    genRelation n
+    layers <- getLayers
+    genRelation layers
 
   shrink r = shrinkRelSameDim r <> shrinkRelDecreaseDim r
 
 instance Arbitrary Relation2 where
   arbitrary = do
-    n <- chooseInt (0, 5)
-    r <- genRelation n
-    s <- genRelation n
+    layers <- getLayers
+    r <- genRelation layers
+    s <- genRelation layers
     pure $ Rel2 (r, s)
 
   shrink (Rel2 (r, s)) =
@@ -343,10 +360,10 @@ instance Arbitrary Relation2 where
 
 instance Arbitrary Relation3 where
   arbitrary = do
-    n <- chooseInt (0, 5)
-    r <- genRelation n
-    s <- genRelation n
-    u <- genRelation n
+    layers <- getLayers
+    r <- genRelation layers
+    s <- genRelation layers
+    u <- genRelation layers
     pure $ Rel3 (r, s, u)
 
   shrink (Rel3 (r, s, u)) =
@@ -362,38 +379,33 @@ instance Arbitrary Relation3 where
 --- Generator functions
 -- For generator: n > 0 should always produce something non-empty!
 genWild :: Int -> Gen Wild
-genWild n | n < 1 = error "<1 genBranches "
-genWild 0 = pure univ
-genWild n = do
+genWild 1 = pure $ Univ
+genWild n = assert (n > 1) $ do
   r <- genRelation (n - 1)
   pure $ nonEmptyWild r
 
 genBranches :: Int -> Gen Branches
-genBranches n
-  | n < 1 = error "<1 genBranches"
-  | otherwise = do
-      numKeys <- chooseInt (1, 5)
-      ps <- replicateM numKeys $ do
-        k <- arbitrary
-        v <- case n of
-          0 -> error "Too small branch n"
-          1 -> pure univ
-          _ -> genRelation (n - 1)
-        pure (k, v)
-      pure $ IntMap.fromList ps
+genBranches 1 = sized $ \branchCount -> pure $ IntMap.fromList $ zip [1 .. branchCount] (repeat univ)
+genBranches n = assert (n > 1) $ do
+  size <- getSize
+  branchCount <- chooseInt (1, size)
+  let branchSize = size `div` branchCount
+  rs <- vectorOf branchCount $ resize branchSize $ genRelation (n - 1)
+  pure $ IntMap.fromList $ zip [1 .. branchCount] rs
 
 --- Only generate non-empty? Maybe?
 genRelation :: Int -> Gen Relation
-genRelation n | n < 0 = error "Non-positive dim"
-genRelation 0 = oneof [pure empt, pure univ]
-genRelation n = do
-  (xs, w) <-
-    oneof $
-      [ (,) <$> genBranches n <*> pure empt
-      , (,) <$> pure empt <*> genWild n
-      , (,) <$> genBranches n <*> genWild n
-      ]
-  pure $ R {branches = xs, wild = w, depth = fromIntegral n, size = getSize xs}
+genRelation 0 = oneof [pure univ, pure empt]
+genRelation n = assert (n >= 1) $ sized $ \size -> case size of
+  1 -> pure $ univN n
+  _ -> do
+    (xs, w) <-
+      oneof $
+        [ (,) <$> genBranches n <*> pure empt
+        , (,) <$> pure empt <*> genWild n
+        , (,) <$> resize (size `div` 2) (genBranches n) <*> resize (size `div` 2) (genWild n)
+        ]
+    pure $ R {branches = xs, wild = w, depth = n, count = getCount xs}
 
 --- Shrinking functions
 shrinkWild :: Wild -> [Wild]
@@ -409,9 +421,7 @@ shrinkWildDecreaseDim (W w) = [nonEmptyWild w' | w' <- shrinkRelDecreaseDim w]
 -- shrinkWild (W w) = [W w' | w' <- shrink w, not (isEmptyRelation w)]
 
 shrinkBranches :: Branches -> [Branches]
-shrinkBranches xs = deleteKey
-  where
-    deleteKey = [IntMap.delete x xs | x <- IntMap.keys xs]
+shrinkBranches xs = [IntMap.delete x xs | x <- IntMap.keys xs]
 
 -- shrinkKeys = [B (IntMap.insert x (removeEmpty v') xs) | (x, v) <- IntMap.assocs xs, v' <- shrinkRelSameDim v]
 
@@ -422,10 +432,14 @@ shrinkRelSameDim r = branchShrinks <> wildShrinks
   where
     branchShrinks = do
       xs <- shrinkBranches (branches r)
-      pure $ r {branches = xs}
+      let newR = updateCount r {branches = xs}
+      guard (not $ isEmptyRelation newR)
+      pure newR
     wildShrinks = do
       w <- shrinkWild (wild r)
-      pure r {wild = w}
+      let newR = r {wild = w}
+      guard (not $ isEmptyRelation newR)
+      pure newR
 
 shrinkRelDecreaseDim :: Relation -> [Relation]
 shrinkRelDecreaseDim R {depth = 0} = []
@@ -433,13 +447,11 @@ shrinkRelDecreaseDim R {depth = 1} = [empt, univ]
 shrinkRelDecreaseDim r | isEmptyRelation r = [r {depth = depth r - 1}]
 shrinkRelDecreaseDim r = nextWild <> nextBranches
   where
-    -- <> [cutLastDim r]
-
     xs = branches r
     nextBranches = IntMap.elems xs
     nextWild = case wild r of
-      None -> []
-      Univ -> []
+      None -> pure $ emptyN (depth r - 1)
+      Univ -> pure $ univN (depth r - 1)
       W w -> [w]
 
 -- cutLastDim :: Relation -> Relation
