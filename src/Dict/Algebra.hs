@@ -6,7 +6,6 @@ module Dict.Algebra where
 import Control.Exception (assert)
 import Data.IntMap.Strict qualified as IntMap
 import PrettyShow
-import Relude.Unsafe as US
 import Test.QuickCheck hiding ((><))
 import Text.Show qualified
 
@@ -473,6 +472,7 @@ hasEmpty R {branches = xs, wild = w} = case w of
   Univ -> any hasEmpty xs
   None -> IntMap.null xs || any hasEmpty xs
   W v -> any hasEmpty xs || hasEmpty v
+
 tries :: (Relation) -> [Trie]
 tries R {branches = xs, wild = Univ} | IntMap.null xs = [[S]]
 tries (R {wild = w, branches = xs}) = fins ++ wilds
@@ -487,74 +487,3 @@ tries (R {wild = w, branches = xs}) = fins ++ wilds
 
 eq :: Relation -> Relation -> Bool
 r `eq` s = sortNub (tries r) == sortNub (tries s)
-
----------------------------------------------------
--- repl
----------------------------------------------------
-
-xx :: Relation
-xx = R {depth = 2, count = 1, wild = W (R {depth = 1, count = 0, wild = W (R {depth = 0, count = 0, wild = Univ, branches = fromList []}), branches = fromList []}), branches = fromList [(1, R {depth = 1, count = 0, wild = W (R {depth = 0, count = 0, wild = Univ, branches = fromList []}), branches = fromList []})]}
-
-yy :: Relation
-yy = R {depth = 2, count = 1, wild = W (R {depth = 1, count = 1, wild = None, branches = fromList [(5, R {depth = 0, count = 0, wild = Univ, branches = fromList []})]}), branches = fromList [(1, R {depth = 1, count = 0, wild = W (R {depth = 0, count = 0, wild = Univ, branches = fromList []}), branches = fromList []})]}
-
-nodeCount :: Relation -> Int
-nodeCount r = IntMap.size (branches r) + wildCount + branchCount
-  where
-    wildCount = case wild r of
-      None -> 0
-      Univ -> 1
-      W w -> nodeCount w
-    branchCount = sum (IntMap.map nodeCount (branches r))
-
-printInfo :: Relation2 -> IO ()
-printInfo (Rel2 (x, y)) = print (nodeCount x, depth x, count x, nodeCount y, depth y, count y) >> print (nodeCount (x /\ y), depth (x /\ y), count (x /\ y))
-
-rr :: IO Relation
-rr = US.head <$> sample' (resize 100 arbitrary :: Gen Relation)
-ss :: IO Relation
-ss = US.head <$> sample' (resize 100 arbitrary :: Gen Relation)
-
-r2 :: IO Relation2
-r2 = US.head <$> sample' (resize 100 arbitrary :: Gen Relation2)
-rrun :: IO ()
-rrun =
-  r2 >>= \(Rel2 (x, y)) -> do
-    let t1 = branches x /\ branches y
-    let t2 = branches x `interWild` wild y
-    let t3 = branches y `interWild` wild x
-    let nodeCount' xs = IntMap.size xs + sum (IntMap.map nodeCount xs)
-    print (nodeCount x, nodeCount y)
-    print (nodeCount' t1, nodeCount' t2, nodeCount' t3)
-    print (nodeCount' (t1 <+> t2))
-    print (nodeCount' (t1 <+> t2 <+> t3))
-
-rrun2 :: IO ()
-rrun2 =
-  r2 >>= \(Rel2 (x, y)) ->
-    if wild x == None || wild y == None
-      then pure ()
-      else do
-        print (nodeCount x, nodeCount y)
-        case wild y of
-          W wr -> print (nodeCount wr, IntMap.size (branches x))
-          _ -> print "univ or none"
-
-rrun3 :: IO ()
-rrun3 =
-  r2 >>= \(Rel2 (x, y)) -> do
-    let t1 = branches x /\ branches y
-    let t2 = branches x `interWild` wild y
-    let t3 = branches y `interWild` wild x
-    let nc' xs = IntMap.size xs + sum (IntMap.map nodeCount xs)
-    let totall = nc' (t1 <+> t2 <+> t3)
-    if totall > 1000
-      then do
-        putStrLn "=== BLOWUP ==="
-        print (nodeCount x, nodeCount y)
-        print (nc' t1, nc' t2, nc' t3)
-        putStrLn "x:"
-        print x
-        putStrLn "y:"
-        print y
-      else pure ()
