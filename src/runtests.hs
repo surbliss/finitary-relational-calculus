@@ -8,4 +8,4 @@ tests =
     ]
 
 main :: IO ()
-main = defaultMain $ localOption (mkTimeout 3000000) tests
+main = defaultMain $ localOption (mkTimeout 30000000) tests

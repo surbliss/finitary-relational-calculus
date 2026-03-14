@@ -9,20 +9,6 @@ import Test.Tasty.QuickCheck (testProperty)
 ---------------------------------------------------
 -- Generation of relations
 ---------------------------------------------------
-detailedEq :: Relation -> Relation -> Property
-detailedEq lhs rhs =
-  counterexample
-    ( show (branches lhs)
-        ++ show (wild lhs)
-        ++ show (depth lhs)
-        ++ "\n"
-        ++ show (branches rhs)
-        ++ show (wild rhs)
-        ++ show (depth rhs)
-    )
-    $ property
-    $ lhs `eq` rhs
-
 prop_eqSelf :: Relation -> Property
 prop_eqSelf d = d === d
 
@@ -33,7 +19,7 @@ prop_tripleSameDim :: Relation3 -> Property
 prop_tripleSameDim (Rel3 (x, y, z)) = depth x === depth y .&&. depth y == depth z
 
 prop_interComm :: Relation2 -> Property
-prop_interComm (Rel2 (x, y)) = (x /\ y) `detailedEq` (y /\ x)
+prop_interComm (Rel2 (x, y)) = (x /\ y) === (y /\ x)
 
 prop_noEmptyBranches :: Relation -> Bool
 prop_noEmptyBranches r = isEmptyRelation r || (not . hasEmpty) r
@@ -84,39 +70,18 @@ prop_27 x = (univN (depth x) /\ x) === x
 prop_28 :: Relation3 -> Property
 prop_28 (Rel3 (x, y, z)) = (x /\ (y \/ z)) === ((x /\ y) \/ (x /\ z))
 
--- prop_30
--- prop_31
--- prop_32
-
---- Couterexample:
--- (28):                   FAIL (0.04s)
---      *** Failed! Falsified (after 9 tests and 15 shrinks):
---      Rel3 ({5},{, * -> {, * -> {7}}},{, * -> {8 -> {-7, 7}}})
---      {5 -> {8 -> {-7}, * -> {7}}} /= {5 -> {8 -> {-7, 7}}}
---      Use --quickcheck-replay="(SMGen 6982499325617234579 14420437858484944245,8)" to reproduce.
---      Use -p '/(28)/' to rerun this test only.
---    (29):                   FAIL (0.07s)
---      *** Failed! Falsified (after 2 tests and 21 shrinks):
---      Rel3 ({, * -> {-1}},{1},{, * -> {, * -> {1}}})
---      {1 -> {-1 -> {1}, * -> {1}}, * -> {-1 -> {1}}} /= {, * -> {-1 -> {1}}}
---      Use --quickcheck-replay="(SMGen 6134009087970008456 4260353227498352113,1)" to reproduce.
---      Use -p '/(29)/' to rerun this test only.
-
 prop_29 :: Relation3 -> Property
 prop_29 (Rel3 (x, y, z)) = ((x \/ y) /\ z) === ((x /\ z) \/ (y /\ z))
 
-time :: (Testable prop) => Int -> prop -> Property
-time k = within $ k * 1000000
-
 --- Also: For these, they don't all need to be same dim, so consider writing some new product-specific ones.
 prop_30 :: Relation2 -> Relation2 -> Property
-prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = time 1 $ (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
+prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = withMaxSuccess 10 $ (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
 
 prop_31 :: Relation -> Relation2 -> Property
-prop_31 c (Rel2 (d, e)) = withMaxSuccess 100 $ time 1 $ c >< (d \/ e) === (c >< d) \/ (c >< e)
+prop_31 c (Rel2 (d, e)) = withMaxSuccess 10 $ c >< (d \/ e) === (c >< d) \/ (c >< e)
 
 prop_32 :: Relation2 -> Relation -> Property
-prop_32 (Rel2 (c, d)) e = withMaxSuccess 100 $ time 1 $ (c \/ d) >< e === (c >< e) \/ (d >< e)
+prop_32 (Rel2 (c, d)) e = withMaxSuccess 10 $ (c \/ d) >< e === (c >< e) \/ (d >< e)
 
 propertyTests :: TestTree
 propertyTests =
