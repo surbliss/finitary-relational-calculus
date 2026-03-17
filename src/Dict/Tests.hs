@@ -9,8 +9,8 @@ import Test.Tasty.QuickCheck (testProperty)
 ---------------------------------------------------
 -- Generation of relations
 ---------------------------------------------------
-prop_eqSelf :: Relation -> Property
-prop_eqSelf d = d === d
+prop_eqSelf :: Relation1 -> Property
+prop_eqSelf (Rel1 d) = d === d
 
 prop_pairSameDim :: Relation2 -> Property
 prop_pairSameDim (Rel2 (x, y)) = depth x === depth y
@@ -21,11 +21,11 @@ prop_tripleSameDim (Rel3 (x, y, z)) = depth x === depth y .&&. depth y == depth 
 prop_interComm :: Relation2 -> Property
 prop_interComm (Rel2 (x, y)) = (x /\ y) === (y /\ x)
 
-prop_noEmptyBranches :: Relation -> Bool
-prop_noEmptyBranches r = isEmptyRelation r || (not . hasEmpty) r
+prop_noEmptyBranches :: Relation1 -> Bool
+prop_noEmptyBranches (Rel1 r) = isEmptyRelation r || (not . hasEmpty) r
 
-prop_noEmptyBranchesBin :: (Relation -> Relation -> Relation) -> Relation -> Relation -> Bool
-prop_noEmptyBranchesBin f r s = prop_noEmptyBranches (r `f` s)
+prop_noEmptyBranchesBin :: (Relation -> Relation -> Relation) -> Relation2 -> Bool
+prop_noEmptyBranchesBin f (Rel2 (r, s)) = prop_noEmptyBranches (Rel1 $ r `f` s)
 
 --- 1-dim rules, but should also hold in multi-dim:
 prop_13 :: Relation2 -> Property
@@ -43,29 +43,29 @@ prop_18 (Rel2 (x, y)) = (neg x /\ neg y) === neg (x \/ y)
 
 -- Prop 19 is same as prop 20
 --- Complements
-prop_20 :: Relation -> Property
-prop_20 d = d === neg (neg d)
+prop_20 :: Relation1 -> Property
+prop_20 (Rel1 d) = d === neg (neg d)
 
 prop_21 :: Relation2 -> Property
 prop_21 (Rel2 (x, y)) = neg (x /\ y) === neg x \/ neg y
 
-prop_22 :: Relation -> Relation -> Property
-prop_22 x y = neg (x >< y) === ((neg x >< univN (depth y)) \/ (univN (depth x) >< neg y))
+prop_22 :: Relation1 -> Relation1 -> Property
+prop_22 (Rel1 x) (Rel1 y) = neg (x >< y) === ((neg x >< univRelN (depth y)) \/ (univRelN (depth x) >< neg y))
 
 prop_23 :: Relation2 -> Property
 prop_23 (Rel2 (x, y)) = neg (x \/ y) === neg x /\ neg y
 
-prop_24 :: Relation -> Property
-prop_24 x = (x /\ emptyN (depth x)) === emptyN (depth x)
+prop_24 :: Relation1 -> Property
+prop_24 (Rel1 x) = (x /\ emptyRelN (depth x)) === emptyRelN (depth x)
 
-prop_25 :: Relation -> Property
-prop_25 x = (emptyN (depth x)) /\ x === emptyN (depth x)
+prop_25 :: Relation1 -> Property
+prop_25 (Rel1 x) = (emptyRelN (depth x)) /\ x === emptyRelN (depth x)
 
-prop_26 :: Relation -> Property
-prop_26 x = x /\ univN (depth x) === x
+prop_26 :: Relation1 -> Property
+prop_26 (Rel1 x) = x /\ univRelN (depth x) === x
 
-prop_27 :: Relation -> Property
-prop_27 x = (univN (depth x) /\ x) === x
+prop_27 :: Relation1 -> Property
+prop_27 (Rel1 x) = (univRelN (depth x) /\ x) === x
 
 prop_28 :: Relation3 -> Property
 prop_28 (Rel3 (x, y, z)) = (x /\ (y \/ z)) === ((x /\ y) \/ (x /\ z))
@@ -77,12 +77,17 @@ prop_29 (Rel3 (x, y, z)) = ((x \/ y) /\ z) === ((x /\ z) \/ (y /\ z))
 prop_30 :: Relation2 -> Relation2 -> Property
 prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = withMaxSuccess 10 $ (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
 
-prop_31 :: Relation -> Relation2 -> Property
-prop_31 c (Rel2 (d, e)) = withMaxSuccess 10 $ c >< (d \/ e) === (c >< d) \/ (c >< e)
+prop_31 :: Relation1 -> Relation2 -> Property
+prop_31 (Rel1 c) (Rel2 (d, e)) = withMaxSuccess 10 $ c >< (d \/ e) === (c >< d) \/ (c >< e)
 
-prop_32 :: Relation2 -> Relation -> Property
-prop_32 (Rel2 (c, d)) e = withMaxSuccess 10 $ (c \/ d) >< e === (c >< e) \/ (d >< e)
+prop_32 :: Relation2 -> Relation1 -> Property
+prop_32 (Rel2 (c, d)) (Rel1 e) = withMaxSuccess 10 $ (c \/ d) >< e === (c >< e) \/ (d >< e)
 
+prop_symNilpotent :: Relation1 -> Property
+prop_symNilpotent (Rel1 x) = x <+> x === emptyRelN (dim x)
+
+prop_symComm :: Relation2 -> Property
+prop_symComm (Rel2 (x, y)) = x <+> y === y <+> x
 propertyTests :: TestTree
 propertyTests =
   testGroup
@@ -109,7 +114,7 @@ propertyTests =
     , testProperty "(31)" prop_31
     , testProperty "(32)" prop_32
     , testProperty "No empty plain" prop_noEmptyBranches
-    , testProperty "No empty neg" (prop_noEmptyBranches . neg)
+    , testProperty "No empty neg" (prop_noEmptyBranches . \(Rel1 x) -> Rel1 (neg x))
     , testProperty "No empty inter" (prop_noEmptyBranchesBin (/\))
     , testProperty "No empty union" (prop_noEmptyBranchesBin (\/))
     , testProperty "No empty diff" (prop_noEmptyBranchesBin (\\))
@@ -117,6 +122,8 @@ propertyTests =
     --- Dimensions
     , testProperty "Pair same dim" $ prop_pairSameDim
     , testProperty "Triple same dim" $ prop_tripleSameDim --
+    , testProperty "<+> nilpotent" $ prop_symNilpotent --
+    , testProperty "<+> commutative" $ prop_symComm --
     ]
 
 fin :: [Int] -> Relation

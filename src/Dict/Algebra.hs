@@ -26,6 +26,9 @@ type Relation = (Branches, Wild, Int) -- Relation with its depth
 -- Dictionary-helpers
 ---------------------------------------------------
 
+dim :: Relation -> Int
+dim (_, _, n) = n
+
 count :: Branches -> Int
 count (_, i) = i
 
@@ -163,7 +166,7 @@ interSym :: Branches -> Branches -> Node -> Branches
 interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
   where
     comb x ra = case (IntMap.lookup x ys) of
-      Nothing -> Just wy
+      Nothing -> nonEmpty (ra /\ wy)
       Just rx -> nonEmpty $ ra /\ (rx <+> wy)
 
 -- Lookup x into first branch, and compute x /\ y if  present
@@ -191,8 +194,7 @@ instance Algebra Relation where
 
 instance Negatable Relation where
   neg (_, _, 0) = error "Can't negate 0-dim"
-  neg ((xs, _), Nothing, 1) = assert (IntMap.null xs) univ
-  neg (xs, Nothing, n) = (xs, Just (N (univN (n - 1))), n)
+  neg (xs, Nothing, n) = (xs, Just ((univN (n - 1))), n)
   neg (xs, Just w, n) = (xs, nonEmpty (neg w), n)
 
   -- Univ relation is {* -> E}
@@ -290,14 +292,10 @@ getCount bs = IntMap.size bs
 --       -- Univ -> Univ
 --       Just w -> Just (projLast w)
 
-emptyN :: Int -> Relation
-emptyN n | n < 1 = error "Negative dimension for emptyN"
-emptyN n = (empty, empty, n)
-
-univN :: Int -> Relation
-univN n | n < 1 = error "Negative dimension for univN"
-univN 1 = (empty, Just univ, 1)
-univN n = (empty, Just (N (univN (n - 1))), n)
+univN :: Int -> Node
+univN n | n < 0 = error "Negative dimension for univN"
+univN 0 = End
+univN n = N (empty, Just (univN (n - 1)), n)
 
 ---------------------------------------------------
 -- Printing and checking
@@ -350,7 +348,7 @@ pairs xs = (branches bs, empty, 2)
     bs = IntMap.fromListWith (\/) $ map mkRelation xs
 
 triples :: [(Int, Int, Int)] -> Relation
-triples xs = foldr (\/) (emptyN 3) [finite [x] >< (finite [y]) >< (finite [z]) | (x, y, z) <- xs]
+triples xs = foldr (\/) (empty >< empty >< empty) [finite [x] >< (finite [y]) >< (finite [z]) | (x, y, z) <- xs]
 
 ---------------------------------------------------
 -- Pretty-printing
@@ -403,146 +401,174 @@ instance PrettyShow Wild where
 ---------------------------------------------------
 -- Generator
 ---------------------------------------------------
--- --- Newtype wrappers to enforce consistent dims for pairs and triples of relations
--- newtype Relation2 = Rel2 (Relation, Relation) deriving (Show, Eq, Ord)
--- newtype Relation3 = Rel3 (Relation, Relation, Relation) deriving (Show, Eq, Ord)
+--- Newtype wrappers to enforce consistent dims for pairs and triples of relations
+newtype Relation1 = Rel1 (Relation) deriving (Show, Eq, Ord)
+newtype Relation2 = Rel2 (Relation, Relation) deriving (Show, Eq, Ord)
+newtype Relation3 = Rel3 (Relation, Relation, Relation) deriving (Show, Eq, Ord)
 
--- getLayers :: Gen Int
--- getLayers = sized $ \size -> case size of
---   0 -> pure 0
---   _ -> chooseInt (1, (floor $ sqrt $ fromIntegral size) `div` 2)
+getLayers :: Gen Int
+getLayers = do
+  size <- getSize
+  chooseInt (1, max 1 $ size)
 
--- instance Arbitrary (Relation) where
---   arbitrary = do
---     layers <- getLayers
---     genRelation layers
+instance Arbitrary (Relation1) where
+  arbitrary = do
+    layers <- getLayers
+    rel <- genRelation layers
+    pure $ Rel1 rel
 
---   shrink r = shrinkRelSameDim r <> shrinkRelDecreaseDim r
+  shrink (Rel1 r) = Rel1 <$> (shrinkRelSameDim r <> shrinkRelDecreaseDim r)
 
--- instance Arbitrary Relation2 where
---   arbitrary = do
---     layers <- getLayers
---     r <- genRelation layers
---     s <- genRelation layers
---     pure $ Rel2 (r, s)
+instance Arbitrary Relation2 where
+  arbitrary = do
+    layers <- getLayers
+    r <- genRelation layers
+    s <- genRelation layers
+    pure $ Rel2 (r, s)
 
---   shrink (Rel2 (r, s)) =
---     [Rel2 (r', s) | r' <- shrinkRelSameDim r]
---       <> [Rel2 (r, s') | s' <- shrinkRelSameDim s]
---       <> [Rel2 (r', s') | r' <- shrinkRelDecreaseDim r, s' <- shrinkRelDecreaseDim s]
+  shrink (Rel2 (r, s)) =
+    [Rel2 (r', s) | r' <- shrinkRelSameDim r]
+      <> [Rel2 (r, s') | s' <- shrinkRelSameDim s]
+      <> [Rel2 (r', s') | r' <- shrinkRelDecreaseDim r, s' <- shrinkRelDecreaseDim s]
 
--- instance Arbitrary Relation3 where
---   arbitrary = do
---     layers <- getLayers
---     r <- genRelation layers
---     s <- genRelation layers
---     u <- genRelation layers
---     pure $ Rel3 (r, s, u)
+instance Arbitrary Relation3 where
+  arbitrary = do
+    layers <- getLayers
+    r <- genRelation layers
+    s <- genRelation layers
+    u <- genRelation layers
+    pure $ Rel3 (r, s, u)
 
---   shrink (Rel3 (r, s, u)) =
---     [Rel3 (r', s, u) | r' <- shrinkRelSameDim r]
---       <> [Rel3 (r, s', u) | s' <- shrinkRelSameDim s]
---       <> [Rel3 (r, s, u') | u' <- shrinkRelSameDim u]
---       <> [ Rel3 (r', s', u')
---          | r' <- shrinkRelDecreaseDim r
---          , s' <- shrinkRelDecreaseDim s
---          , u' <- shrinkRelDecreaseDim u
---          ]
+  shrink (Rel3 (r, s, u)) =
+    [Rel3 (r', s, u) | r' <- shrinkRelSameDim r]
+      <> [Rel3 (r, s', u) | s' <- shrinkRelSameDim s]
+      <> [Rel3 (r, s, u') | u' <- shrinkRelSameDim u]
+      <> [ Rel3 (r', s', u')
+         | r' <- shrinkRelDecreaseDim r
+         , s' <- shrinkRelDecreaseDim s
+         , u' <- shrinkRelDecreaseDim u
+         ]
 
--- --- Generator functions
--- -- For generator: n > 0 should always produce something non-empty!
--- genWild :: Int -> Gen Wild
--- genWild 0 = pure $ univ
--- genWild 1 = pure $ Just univ
--- genWild n = assert (n >= 1) $ do
---   r <- genRelation (n - 1)
---   pure $ nonEmptyWild r
+--- Generator functions
+-- For generator: n > 0 should always produce something non-empty!
+genWild :: Int -> Gen Wild
+genWild n | n < 1 = error "genWild on non-positive"
+genWild n = do
+  r <- genNode (n - 1)
+  pure $ Just r
 
--- genBranches :: Int -> Gen Branches
--- genBranches 1 = sized $ \branchCount -> pure $ IntMap.fromList $ zip [1 .. branchCount] (repeat univ)
--- genBranches n = assert (n > 1) $ do
---   size <- getSize
---   branchCount <- chooseInt (1, max 1 (floor $ sqrt $ fromIntegral size))
---   let branchSize = size `div` branchCount
---   rs <- vectorOf branchCount $ resize branchSize $ genRelation (n - 1)
---   pure $ IntMap.fromList $ zip [1 .. branchCount] rs
+genBranches :: Int -> Gen Branches
+genBranches n | n < 1 = error "genBranches on non-positive"
+genBranches n = do
+  size <- getSize
+  branchCount <- chooseInt (1, max 1 $ (floor . sqrt . fromIntegral) size)
+  let branchSize = size `div` branchCount
+  rs <- vectorOf branchCount $ resize branchSize $ genNode (n - 1)
+  pure $ branches $ IntMap.fromList $ zip [1 .. branchCount] rs
 
--- --- Only generate non-empty? Maybe?
--- genRelation :: Int -> Gen Relation
--- genRelation 0 = oneof [pure univ, pure empt]
--- genRelation n = assert (n >= 1) $ sized $ \size -> case size of
---   1 -> pure $ univN n
---   _ -> do
---     (xs, w) <-
---       oneof $
---         [ (,) <$> genBranches n <*> pure empty
---         , (,) <$> pure empty <*> genWild n
---         , (,) <$> resize (size `div` 2) (genBranches n) <*> resize (size `div` 2) (genWild n)
---         ]
---     pure $ R {branches = xs, wild = w, depth = n, count = getCount xs}
+--- Only generate non-empty? Maybe?
+genRelation :: Int -> Gen Relation
+genRelation n | n < 1 = error "genRelation on non-positive"
+genRelation n = sized $ \size -> case size of
+  1 -> pure (empty, Just (univN (n - 1)), n)
+  _ -> do
+    (xs, w) <-
+      oneof $
+        [ (,) <$> genBranches n <*> pure empty
+        , (,) <$> pure empty <*> genWild n
+        , (,) <$> resize (size `div` 2) (genBranches n) <*> resize (size `div` 2) (genWild n)
+        ]
+    pure (xs, w, n)
 
--- --- Shrinking functions
--- shrinkWild :: Wild -> [Wild]
--- shrinkWild Nothing = []
--- -- shrinkWild Univ = [Nothing]
--- shrinkWild (Just w) = [nonEmptyWild w' | w' <- shrinkRelSameDim w]
+-- Only generate non-empty nodes!
+genNode :: Int -> Gen Node
+genNode n | n < 0 = error "genNode on negative"
+genNode 0 = pure End
+genNode n = sized $ \size -> case size of
+  1 -> pure $ (univN n)
+  _ -> do
+    r <- genRelation n
+    pure $ N r
 
--- shrinkWildDecreaseDim :: Wild -> [Wild]
--- shrinkWildDecreaseDim Nothing = [Nothing]
--- -- shrinkWildDecreaseDim Univ = [Univ]
--- shrinkWildDecreaseDim (Just w) = [nonEmptyWild w' | w' <- shrinkRelDecreaseDim w]
+--- Shrinking functions
+shrinkWild :: Wild -> [Wild]
+shrinkWild Nothing = []
+-- shrinkWild Univ = [Nothing]
+shrinkWild (Just w) = [nonEmpty w' | w' <- shrinkNodeSameDim w]
 
--- -- shrinkWild (Just w) = [Just w' | w' <- shrink w, not (isEmptyRelation w)]
+shrinkWildDecreaseDim :: Wild -> [Wild]
+shrinkWildDecreaseDim Nothing = []
+-- shrinkWildDecreaseDim Univ = [Univ]
+shrinkWildDecreaseDim (Just w) = [nonEmpty w' | w' <- shrinkNodeDecreaseDim w]
 
--- shrinkBranches :: Branches -> [Branches]
--- shrinkBranches xs = [IntMap.delete x xs | x <- IntMap.keys xs]
+-- shrinkWild (Just w) = [Just w' | w' <- shrink w, not (isEmptyRelation w)]
 
--- -- shrinkKeys = [B (IntMap.insert x (removeEmpty v') xs) | (x, v) <- IntMap.assocs xs, v' <- shrinkRelSameDim v]
+shrinkBranchesSameDim :: Branches -> [Branches]
+shrinkBranchesSameDim (_, 0) = []
+shrinkBranchesSameDim (_, 1) = []
+shrinkBranchesSameDim (xs, n) =
+  [(IntMap.delete x xs, n - 1) | x <- IntMap.keys xs]
+    <> [(IntMap.insert x rx' xs, n) | (x, rx) <- IntMap.assocs xs, rx' <- shrinkNodeSameDim rx]
 
--- -- shrinkVal = [B $ IntMap.insert k v' xs | (k, v) <- IntMap.assocs xs, v' <- shrink v, not (isEmptyRelation v')]
+-- shrinkKeys = [B (IntMap.insert x (removeEmpty v') xs) | (x, v) <- IntMap.assocs xs, v' <- shrinkRelSameDim v]
 
--- shrinkRelSameDim :: Relation -> [Relation]
--- shrinkRelSameDim r = branchShrinks <> wildShrinks
---   where
---     branchShrinks = do
---       xs <- shrinkBranches (branches r)
---       let newR = updateCount r {branches = xs}
---       guard (not $ isEmptyRelation newR)
---       pure newR
---     wildShrinks = do
---       w <- shrinkWild (wild r)
---       let newR = r {wild = w}
---       guard (not $ isEmptyRelation newR)
---       pure newR
+-- shrinkVal = [B $ IntMap.insert k v' xs | (k, v) <- IntMap.assocs xs, v' <- shrink v, not (isEmptyRelation v')]
 
--- shrinkRelDecreaseDim :: Relation -> [Relation]
--- shrinkRelDecreaseDim R {depth = 0} = []
--- shrinkRelDecreaseDim R {depth = 1} = [empt, univ]
--- shrinkRelDecreaseDim r | isEmptyRelation r = [r {depth = depth r - 1}]
--- shrinkRelDecreaseDim r = nextWild <> nextBranches
---   where
---     xs = branches r
---     nextBranches = IntMap.elems xs
---     nextWild = case wild r of
---       Nothing -> pure $ emptyN (depth r - 1)
---       -- Univ -> pure $ univN (depth r - 1)
---       Just w -> [w]
+shrinkRelSameDim :: Relation -> [Relation]
+shrinkRelSameDim (xs, w, n) = branchShrinks <> wildShrinks
+  where
+    branchShrinks = do
+      ys <- shrinkBranchesSameDim xs
+      let newR = (ys, w, n)
+      guard (not $ isEmptyRelation newR)
+      pure newR
+    wildShrinks = do
+      v <- shrinkWild w
+      let newR = (xs, v, n)
+      guard (not $ isEmptyRelation newR)
+      pure newR
 
--- ---------------------------------------------------
--- -- Functions for tests
--- ---------------------------------------------------
--- hasEmpty :: Relation -> Bool
--- hasEmpty r
---   | isEmptyRelation r = True
---   | isUniv r = False
--- hasEmpty R {branches = xs, wild = w} = case w of
---   -- Univ -> any hasEmpty xs
---   Nothing -> IntMap.null xs || any hasEmpty xs
---   Just v -> any hasEmpty xs || hasEmpty v
+shrinkNodeSameDim :: Node -> [Node]
+shrinkNodeSameDim End = []
+shrinkNodeSameDim Empty = []
+shrinkNodeSameDim (N r) = [N r' | r' <- shrinkRelSameDim r, not (isEmptyRelation r')]
+
+shrinkNodeDecreaseDim :: Node -> [Node]
+shrinkNodeDecreaseDim End = []
+shrinkNodeDecreaseDim Empty = []
+shrinkNodeDecreaseDim (N r) = [N x | x <- shrinkRelDecreaseDim r]
+
+shrinkRelDecreaseDim :: Relation -> [Relation]
+shrinkRelDecreaseDim (_, _, n) | n <= 1 = []
+shrinkRelDecreaseDim (xs, Nothing, n) | isEmptyBranches xs = [(xs, Nothing, n - 1)]
+shrinkRelDecreaseDim (xs, w, _) = [x | N x <- (wildNodes <> branchesNodes)]
+  where
+    (as, _) = xs
+    branchesNodes = IntMap.elems as
+    wildNodes = case w of
+      Nothing -> []
+      -- Univ -> pure $ univN (depth r - 1)
+      Just x -> [x]
+
+---------------------------------------------------
+-- Functions for tests
+---------------------------------------------------
+hasEmpty :: Relation -> Bool
+hasEmpty r
+  | isEmptyRelation r = True
+  | isUniv r = False
+hasEmpty ((xs, _), w, _) = case w of
+  -- Univ -> any hasEmpty xs
+  Nothing -> IntMap.null xs || any nodeHasEmpty xs
+  Just v -> any nodeHasEmpty xs || nodeHasEmpty v
+  where
+    nodeHasEmpty End = False
+    nodeHasEmpty Empty = True
+    nodeHasEmpty (N r) = hasEmpty r
 
 -- tries :: (Relation) -> [Trie]
 -- -- tries R {branches = xs, wild = Univ} | IntMap.null xs = [[S]]
--- tries (R {wild = w, branches = xs}) = fins ++ wilds
+-- tries ((xs, _), w, _) = fins ++ wilds
 --   where
 --     fins = do
 --       (k, v) <- IntMap.assocs xs
@@ -554,3 +580,12 @@ instance PrettyShow Wild where
 
 -- eq :: Relation -> Relation -> Bool
 -- r `eq` s = sortNub (tries r) == sortNub (tries s)
+
+depth :: Relation -> Int
+depth (_, _, n) = n
+
+emptyRelN :: Int -> Relation
+emptyRelN n = (empty, empty, n)
+
+univRelN :: Int -> Relation
+univRelN n = (empty, Just (univN (n - 1)), n)
