@@ -13,10 +13,10 @@ prop_eqSelf :: Relation1 -> Property
 prop_eqSelf (Rel1 d) = d === d
 
 prop_pairSameDim :: Relation2 -> Property
-prop_pairSameDim (Rel2 (x, y)) = depth x === depth y
+prop_pairSameDim (Rel2 (x, y)) = dim x === dim y
 
 prop_tripleSameDim :: Relation3 -> Property
-prop_tripleSameDim (Rel3 (x, y, z)) = depth x === depth y .&&. depth y == depth z
+prop_tripleSameDim (Rel3 (x, y, z)) = dim x === dim y .&&. dim y == dim z
 
 prop_interComm :: Relation2 -> Property
 prop_interComm (Rel2 (x, y)) = (x /\ y) === (y /\ x)
@@ -50,22 +50,22 @@ prop_21 :: Relation2 -> Property
 prop_21 (Rel2 (x, y)) = neg (x /\ y) === neg x \/ neg y
 
 prop_22 :: Relation1 -> Relation1 -> Property
-prop_22 (Rel1 x) (Rel1 y) = neg (x >< y) === ((neg x >< univRelN (depth y)) \/ (univRelN (depth x) >< neg y))
+prop_22 (Rel1 x) (Rel1 y) = neg (x >< y) === ((neg x >< univRelN (dim y)) \/ (univRelN (dim x) >< neg y))
 
 prop_23 :: Relation2 -> Property
 prop_23 (Rel2 (x, y)) = neg (x \/ y) === neg x /\ neg y
 
 prop_24 :: Relation1 -> Property
-prop_24 (Rel1 x) = (x /\ emptyRelN (depth x)) === emptyRelN (depth x)
+prop_24 (Rel1 x) = (x /\ emptyRelN (dim x)) === emptyRelN (dim x)
 
 prop_25 :: Relation1 -> Property
-prop_25 (Rel1 x) = (emptyRelN (depth x)) /\ x === emptyRelN (depth x)
+prop_25 (Rel1 x) = (emptyRelN (dim x)) /\ x === emptyRelN (dim x)
 
 prop_26 :: Relation1 -> Property
-prop_26 (Rel1 x) = x /\ univRelN (depth x) === x
+prop_26 (Rel1 x) = x /\ univRelN (dim x) === x
 
 prop_27 :: Relation1 -> Property
-prop_27 (Rel1 x) = (univRelN (depth x) /\ x) === x
+prop_27 (Rel1 x) = (univRelN (dim x) /\ x) === x
 
 prop_28 :: Relation3 -> Property
 prop_28 (Rel3 (x, y, z)) = (x /\ (y \/ z)) === ((x /\ y) \/ (x /\ z))
@@ -75,13 +75,13 @@ prop_29 (Rel3 (x, y, z)) = ((x \/ y) /\ z) === ((x /\ z) \/ (y /\ z))
 
 --- Also: For these, they don't all need to be same dim, so consider writing some new product-specific ones.
 prop_30 :: Relation2 -> Relation2 -> Property
-prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = withMaxSuccess 10 $ (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
+prop_30 (Rel2 (c, e)) (Rel2 (d, f)) = (c >< d) /\ (e >< f) === (c /\ e) >< (d /\ f)
 
 prop_31 :: Relation1 -> Relation2 -> Property
-prop_31 (Rel1 c) (Rel2 (d, e)) = withMaxSuccess 10 $ c >< (d \/ e) === (c >< d) \/ (c >< e)
+prop_31 (Rel1 c) (Rel2 (d, e)) = c >< (d \/ e) === (c >< d) \/ (c >< e)
 
 prop_32 :: Relation2 -> Relation1 -> Property
-prop_32 (Rel2 (c, d)) (Rel1 e) = withMaxSuccess 10 $ (c \/ d) >< e === (c >< e) \/ (d >< e)
+prop_32 (Rel2 (c, d)) (Rel1 e) = (c \/ d) >< e === (c >< e) \/ (d >< e)
 
 prop_symNilpotent :: Relation1 -> Property
 prop_symNilpotent (Rel1 x) = x <+> x === emptyRelN (dim x)
