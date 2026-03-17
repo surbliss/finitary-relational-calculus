@@ -12,7 +12,7 @@ import Prelude hiding (Alternative (empty), nonEmpty)
 
 type Wild = Maybe Node
 type Branches = (IntMap Node, Int) -- Map with its size
-data Node = N Relation | End deriving (Show, Eq, Ord)
+data Node = Empty | N Relation | End deriving (Show, Eq, Ord)
 type Relation = (Branches, Wild, Int) -- Relation with its depth
 -- data Relation
 --   = R
@@ -45,7 +45,7 @@ branches xs = (xs, IntMap.size xs)
 --     res = IntMap.mapMaybeWithKey combine xs
 --     combine x rx = case (IntMap.lookup x ys) of
 --       Nothing -> Nothing
---       Just ry -> nonEmptyNode (rx /\ f ry)
+--       Just ry -> nonEmpty (rx /\ f ry)
 
 ---------------------------------------------------
 -- Transformer-classes for normalizing
@@ -70,7 +70,7 @@ class Extendable a where
 ---------------------------------------------------
 
 instance Algebra Branches where
-  (xs, _) \\ (ys, _) = branches $ IntMap.differenceWith (\x y -> nonEmptyNode $ x \\ y) xs ys
+  (xs, _) \\ (ys, _) = branches $ IntMap.differenceWith (\x y -> nonEmpty $ x \\ y) xs ys
 
   -- x \\ y and y \\ x must be disjoint, so we are free to combine the branches
   -- with <+> or \/.
@@ -82,7 +82,7 @@ instance Algebra Branches where
       combineWith as bs = branches $ IntMap.mapMaybeWithKey (comb bs) as
       comb bs a ra = case (IntMap.lookup a bs) of
         Nothing -> Nothing
-        Just rb -> nonEmptyNode (ra /\ rb)
+        Just rb -> nonEmpty (ra /\ rb)
 
   (xs, _) \/ (ys, _) = branches $ IntMap.unionWith (\/) xs ys
 
@@ -91,62 +91,72 @@ instance Algebra Branches where
 instance Algebra Wild where
   Nothing /\ _ = empty
   _ /\ Nothing = empty
-  Just w /\ Just v = nonEmptyNode (w /\ v)
+  Just w /\ Just v = nonEmpty (w /\ v)
 
   Nothing \/ x = x
   x \/ Nothing = x
-  Just w \/ Just v =
-    let res = w \/ v
-     in assert (not (isEmptyNode res)) $ Just (w \/ v)
+  Just w \/ Just v = Just (w \/ v)
 
   Nothing \\ _ = empty
   x \\ Nothing = x
-  Just x \\ Just y = nonEmptyNode $ x \\ y
+  Just x \\ Just y = nonEmpty $ x \\ y
 
   Nothing <+> y = y
   y <+> Nothing = y
-  Just x <+> Just y = nonEmptyNode $ x <+> y
+  Just x <+> Just y = nonEmpty $ x <+> y
 
   empty = Nothing
 
--- Q: Should we assert only End with End here?
-instance Algebra Node where
-  End /\ x = x
-  x /\ End = x
-  N r /\ N s = N (r /\ s)
+-- Note: Wild _can't_ be negated, because we don't know how deep 'Empty' is outside of a relation!
 
-  End \/ _ = univ
-  _ \/ End = univ
+-- Q: Should we assert only End with End here?
+node :: Relation -> Node
+node r
+  | isEmptyRelation r = Empty
+  | otherwise = N r
+instance Algebra Node where
+  End /\ End = End
+  Empty /\ _ = Empty
+  _ /\ Empty = Empty
+  End /\ _ = error "/\\Right node deeper"
+  _ /\ End = error "/\\ Left node deeper"
+  N r /\ N s = node (r /\ s)
+
+  End \/ End = End
+  Empty \/ x = x
+  x \/ Empty = x
+  End \/ _ = error "\\/ Right node deeper"
+  _ \/ End = error "\\/ Left node deeper"
   N r \/ N s = N (r \/ s)
 
-  End \\ y = neg y
-  _ \\ End = empty
-  N x \\ N y = N (x \\ y)
+  End \\ End = Empty
+  Empty \\ _ = Empty
+  x \\ Empty = x
+  End \\ _ = error "\\\\ Right node deeper"
+  _ \\ End = error "\\\\ Left node deeper"
+  N x \\ N y = node (x \\ y)
 
-  End <+> y = neg y
-  x <+> End = neg x
-  N x <+> N y = N (x <+> y)
+  End <+> End = Empty
+  Empty <+> x = x
+  x <+> Empty = x
+  End <+> _ = error "<+> Right node deeper"
+  _ <+> End = error "<+> Left node deeper"
+  N x <+> N y = node (x <+> y)
 
-  empty = N empty
+  empty = Empty
 
 instance Negatable Node where
   univ = End
 
-  neg End = N empty
-  neg (N r) = N (neg r)
-
-instance Negatable Wild where
-  -- Univ wild is * -> E
-  univ = Just End
-
-  neg Nothing = univ
-  neg (Just n) = nonEmptyNode (neg n)
+  neg End = empty
+  neg Empty = univ
+  neg (N r) = node (neg r)
 
 --- Some helper-functions for Algebra Relation instance below:
 updateBranch :: (Node -> Node) -> Branches -> Branches
 updateBranch f (xs, _) = (res, IntMap.size res)
   where
-    res = IntMap.mapMaybe (nonEmptyNode . f) xs
+    res = IntMap.mapMaybe (nonEmpty . f) xs
 
 -- Lookup x into first branch, and compute x /\ (y + w) if  present
 interSym :: Branches -> Branches -> Node -> Branches
@@ -154,11 +164,11 @@ interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
   where
     comb x ra = case (IntMap.lookup x ys) of
       Nothing -> Just wy
-      Just rx -> nonEmptyNode $ ra /\ (rx <+> wy)
+      Just rx -> nonEmpty $ ra /\ (rx <+> wy)
 
 -- Lookup x into first branch, and compute x /\ y if  present
 inter :: Branches -> Node -> Branches
-inter (xs, _) y = branches $ IntMap.mapMaybe (\x -> nonEmptyNode (x /\ y)) xs
+inter (xs, _) y = branches $ IntMap.mapMaybe (\x -> nonEmpty (x /\ y)) xs
 
 instance Algebra Relation where
   -- Optimization: If both wildcards are empty, then only iterate over the
@@ -176,25 +186,33 @@ instance Algebra Relation where
   -- If not rewriting useing other rules, then we have to explicitly factor out between branches and wild, like for /\.
   r \/ s = neg (neg r /\ neg s)
   x \\ y = x /\ neg y
+
   empty = (empty, empty, 1)
 
 instance Negatable Relation where
-  neg (xs, Nothing, n) | isEmptyBranches xs = univN n
-  neg (xs, w, n) = (xs, neg w, n)
+  neg (_, _, 0) = error "Can't negate 0-dim"
+  neg ((xs, _), Nothing, 1) = assert (IntMap.null xs) univ
+  neg (xs, Nothing, n) = (xs, Just (N (univN (n - 1))), n)
+  neg (xs, Just w, n) = (xs, nonEmpty (neg w), n)
 
   -- Univ relation is {* -> E}
-  univ = (empty, univ, 1)
+  univ = (empty, Just univ, 1)
 
 --- For all these: Only do the 'isEmptyRelation' check in the actual relation definition
 instance Extendable Branches where
   (xs, n) >< r = (xs <&> (>< r), n)
 
-instance Extendable Wild where
-  w >< r = w <&> (>< r)
+-- instance Extendable Wild where
+--   w >< r = w <&> (>< r)
 
 instance Extendable Node where
   End >< r = N r
+  Empty >< _ = empty
   N s >< r = N (s >< r)
+
+instance Extendable Wild where
+  Nothing >< _ = Nothing
+  Just w >< r = Just (w >< r)
 
 instance Extendable Relation where
   (xs, Nothing, n) >< (_, _, m) | isEmptyBranches xs = (empty, empty, n + m)
@@ -215,27 +233,20 @@ isEmptyBranches _ = False
 
 isEmptyRelation :: Relation -> Bool
 isEmptyRelation (xs, Nothing, _) = isEmptyBranches xs
-isEmptyRelation (_, Just _, _) = False
+isEmptyRelation _ = False
 
-isEmptyNode :: Node -> Bool
-isEmptyNode End = False
-isEmptyNode (N r) = isEmptyR r
-  where
-    isEmptyR :: Relation -> Bool
-    isEmptyR (xs, Nothing, _) = isEmptyBranches xs
-    isEmptyR _ = False
-
-nonEmptyNode :: Node -> Maybe Node
-nonEmptyNode n | isEmptyNode n = Nothing | otherwise = Just n
+nonEmpty :: Node -> Maybe Node
+nonEmpty Empty = Nothing
+nonEmpty x = Just x
 
 -- nonEmptyWild :: Node -> Wild
 -- nonEmptyWild End = Just End
--- nonEmptyWild (N r) = nonEmptyNode r
+-- nonEmptyWild (N r) = nonEmpty r
 
 -- removeEmptyBranches :: Branches -> Branches
 -- removeEmptyBranches (xs, _) = (IntMap.filter (not . isEmptyNode))
 removeEmpty :: IntMap Node -> Branches
-removeEmpty xs = branches $ IntMap.filter (not . isEmptyNode) xs
+removeEmpty xs = branches $ IntMap.filter (/= Empty) xs
 
 -- simplifyWild :: Wild -> Wild
 -- simplifyWild Nothing = Nothing
@@ -285,7 +296,7 @@ emptyN n = (empty, empty, n)
 
 univN :: Int -> Relation
 univN n | n < 1 = error "Negative dimension for univN"
-univN 1 = univ
+univN 1 = (empty, Just univ, 1)
 univN n = (empty, Just (N (univN (n - 1))), n)
 
 ---------------------------------------------------
@@ -327,7 +338,7 @@ finite x = (branches bs, empty, 1)
     bs = IntMap.fromSet (\_ -> univ) (toSet x)
 
 cofinite :: (ToIntSet a) => a -> Relation
-cofinite x = (branches bs, univ, 1)
+cofinite x = (branches bs, Just univ, 1)
   where
     bs = IntMap.fromSet (\_ -> univ) (toSet x)
 
@@ -338,8 +349,8 @@ pairs xs = (branches bs, empty, 2)
     mkRelation (x, y) = (x, N (finite y))
     bs = IntMap.fromListWith (\/) $ map mkRelation xs
 
--- triples :: [(Int, Int, Int)] -> Relation
--- triples xs = foldr (\/) (emptyN 3) [finite [x] >< N (finite [y]) >< N (finite [z]) | (x, y, z) <- xs]
+triples :: [(Int, Int, Int)] -> Relation
+triples xs = foldr (\/) (emptyN 3) [finite [x] >< (finite [y]) >< (finite [z]) | (x, y, z) <- xs]
 
 ---------------------------------------------------
 -- Pretty-printing
@@ -356,6 +367,7 @@ isUniv :: Relation -> Bool
 isUniv _ = False
 instance PrettyShow Node where
   pshow End = "E"
+  pshow Empty = "Ø"
   pshow (N r) = pshow r
 
 instance PrettyShow Relation where
@@ -386,7 +398,6 @@ instance PrettyShow Branches where
 instance PrettyShow Wild where
   pshow w = case w of
     Nothing -> ""
-    -- Univ -> ", * -> U"
     Just a -> "* -> " <> pshow a
 
 ---------------------------------------------------
