@@ -11,11 +11,9 @@ repl *ARGS:
     cabal repl {{ ARGS }}
 
 # Run ghcid -- auto-recompile and run `main` function
-run:
-    ghcid --command="ghci -isrc src/main.hs" --run="main" --test-message="" -W -q
-
-run-set:
-    ghcid --command="ghci -isrc src/main-old2.hs" --run="main" --test-message="" -W -q
+# Broken atm
+# run:
+#     ghcid --command="ghci -isrc src/main.hs" --run="main" --test-message="" -W -q
 
 
 test *ARGS:

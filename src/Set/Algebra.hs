@@ -3,15 +3,9 @@ where
 
 import Control.Exception (assert)
 import Data.IntSet qualified as IntSet
-
--- import Data.List.NonEmpty (NonEmpty ((:|)), (<|))
 import Data.List.NonEmpty qualified as NE
-
--- import Data.Set (Set)
 import Data.Set qualified as Set
 import PrettyShow
-
--- type IntSet = IntSet.IntSet
 
 --- Invariant to be maintained: IntSet is _never_ empty!
 data Base = Empty | Univ | With IntSet | Without IntSet deriving (Eq, Show, Ord)
@@ -152,8 +146,6 @@ compl s = case s of
       cs = Set.map compl xs -- Either a set of base, or set of union of prods
       u = univ (dim s)
 
--- Set.fold (/\) (univ (dim s)) (compl `Set.map` xs)
-
 -- Makes sure sets are non-empty of base
 normalizeBase :: Base -> Base
 normalizeBase (With x) | IntSet.null x = Empty
@@ -187,18 +179,10 @@ s /\ s' =
         pairs = Set.cartesianProduct xs ys
         emptyProd = emptyA (dim s)
     (Union xs, y) -> Union $ (/\ y) `Set.map` xs
-    -- (Union (x :| []), y) -> x /\ y
     (Times (x :| []), y) -> x /\ y
     (x, Union ys) -> Union $ (x /\) `Set.map` ys
-    -- (x, Union (y :| [])) -> x /\ y
     (x, Times (y :| [])) -> x /\ y
-    --- Non-trivial Unions
-    -- (28)
-    -- (x, Union (y :| y' : ys)) -> (x /\ y) \/ (x /\ Union (y' :| ys))
-    -- (29)
-    -- (Union (x :| x' : xs), y) -> (x /\ y) \/ (Union (x' :| xs) /\ y)
-    -- (32)
-    --- Timess (Now there are no unions!). Also, the assert makes sure the dimensions are equal, so just error in those cases (Basically, something non-product with something product)
+    --- Times (Now there are no unions!). Also, the assert makes sure the dimensions are equal, so just error in those cases (Basically, something non-product with something product)
     (Times (x :| x' : xs), Times (y :| y' : ys)) ->
       (x /\ y) >< (Times (x' :| xs) /\ Times (y' :| ys))
     (Base _, Times (_ :| _ : _)) -> error "Base inter dim>2"
@@ -214,8 +198,6 @@ baseUnion s s' = normalizeBase $ case (s, s') of
   (With x, Without y) -> Without $ y IntSet.\\ x
   (Without x, With y) -> Without $ x IntSet.\\ y
   (Without x, Without y) -> Without $ IntSet.intersection x y
-
---- FRITZ: Prøv til møde at vise forskel for med/uden dette!
 
 (\/) :: Algebra -> Algebra -> Algebra
 s \/ s' = case (s, s') of
@@ -233,14 +215,12 @@ s \/ s' = case (s, s') of
   (Union xs, b@(Base _)) -> Union $ Set.map (\/ b) xs
   (b@(Base _), Union xs) -> Union $ Set.map (b \/) xs
   -- Simplify singletons
-  -- (x, Union (y :| [])) -> x \/ y
   ((Base _), Times (_ :| _ : _)) -> error "Base union dim>2"
   (Times (_ :| _ : _), (Base _)) -> error "dim>2 union Base"
   (x@(Times (_ :| _ : _)), y@(Times (_ :| _ : _))) -> Union $ Set.fromList [x, y]
 
 (><) :: Algebra -> Algebra -> Algebra
 s >< s' =
-  -- trace (debugShow s ++ " >< " ++ debugShow s') $
   case (s, s') of
     --- Simplify if argument empty (Nothing happens if univ)
     (_, _) | isEmpty s || isEmpty s' -> emptyA $ dim s + dim s'
@@ -253,8 +233,6 @@ s >< s' =
     (Union xs, y@(Times _)) -> Union $ Set.map (>< y) xs
     (x@(Times _), Union ys) -> Union $ Set.map (x ><) ys
     --- Non-trivial Unions
-    -- (x@(Base _), Union (y :| y' : ys)) -> (x >< y) \/ (x >< Union (y' :| ys))
-    -- (32)
     --- Timess (Now there are no unions!)
     (Times xs@(_ :| _), Times ys@(_ :| _)) -> Times $ xs <> ys
     (x@(Base _), Times xs@(_ :| _)) -> Times $ one x <> xs
@@ -283,8 +261,6 @@ proj i s = case s of
     where
       ps = Set.map (proj i) xs
       e = emptyA (dim s - 1)
-
--- proj i (Union xs) = foldl (\/) empty (map (projProd i) xs)
 
 --- _Only_ for Bases, enforced through Term's smart-constructor
 baseDiff :: Base -> Base -> Base

@@ -19,20 +19,17 @@ common common
     relude,
 
   build-depends:
+    QuickCheck,
     base,
+    containers,
     ghc-typelits-natnormalise,
     relude,
-
-library
-  import: common
-  build-depends:
-    QuickCheck,
-    containers,
-    lattices,
     tasty,
     tasty-hunit,
     tasty-quickcheck,
 
+library
+  import: common
   exposed-modules:
     Dict.Algebra
     Generic.Algebra
@@ -59,15 +56,7 @@ test-suite finitary-test
   main-is: runtests.hs
   type: exitcode-stdio-1.0
   other-modules:
-    Dict.Algebra
     Dict.Tests
-    PrettyShow
 
   build-depends:
-    QuickCheck,
-    containers,
-    finitary,
-    lattices,
-    tasty,
-    tasty-hunit,
-    tasty-quickcheck,
+    finitary

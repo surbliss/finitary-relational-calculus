@@ -66,10 +66,6 @@ Term x >< Term y = Term (x A.>< y)
 (\/) :: (Ord a) => Term n a -> Term n a -> Term n a
 Term x \/ Term y = Term (x A.\/ y)
 
--- TODO: Permutation, projection and diagonalization
--- perm :: [Int] -> Term n a -> Term n a
--- perm is (Term x) = Term $ A.perm is x
-
 -- If result is type Term 0 a, then it should always be the empty set
 -- Also remember to rerun \/, so terms can be normalized
 proj :: (Ord a) => Int -> Term (n + 2) a -> Term (n + 1) a
@@ -77,10 +73,6 @@ proj i (Term x) = Term $ A.proj i x
 
 diag :: (Ord a) => Term (n + 2) a -> Term (n + 1) a
 diag (Term x) = Term $ A.diag x
-
---
--- join :: Int -> Term n a -> Term n a -> Term (n + 1) a
--- join = undefined
 
 pprint :: (A.PrettyShow a) => Term n a -> IO ()
 pprint (Term x) = A.pprint x

@@ -27,6 +27,10 @@ count (_, i) = i
 branches :: IntMap Node -> Branches
 branches xs = (xs, IntMap.size xs)
 
+-- Helper
+(==>) :: (Negatable a) => a -> a -> a
+x ==> y = neg x \/ y
+
 ---------------------------------------------------
 -- Transformer-classes for normalizing
 ---------------------------------------------------

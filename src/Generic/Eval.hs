@@ -10,8 +10,6 @@ import Generic.Algebra
 --- Evaluation:
 
 -- Each element is a tuple (shound be homogenous)
--- newtype Element a = Element [a] deriving (Show, Eq, Ord)
--- newtype Result a = Result (Finitary (Set (Element a))) deriving (Show, Eq)
 data Result a where
   With :: (Set [a]) -> Result a
   Without :: (Set [a]) -> Result a
@@ -55,7 +53,6 @@ With x `interRes` Without y = With $ x Set.\\ y
 Without x `interRes` With y = With $ y Set.\\ x
 Without x `interRes` Without y = Without $ Set.union x y
 
--- (13)-(15)
 unionRes :: (Ord a) => Result a -> Result a -> Result a
 With x `unionRes` With y = With $ Set.union x y
 With x `unionRes` Without y = Without $ y Set.\\ x
@@ -64,9 +61,6 @@ Without x `unionRes` Without y = Without $ Set.intersection x y
 
 cartProd :: (Ord a) => Set [a] -> Set [a] -> Set [a]
 xs `cartProd` ys = Set.cartesianProduct xs ys & Set.map (\(x, y) -> x <> y)
-
--- where
--- (xs, ys) = Set.cartesianProduct s u
 
 -- NOTE: When applying this, remember to check for any empty sets!
 prodRes :: (Ord a) => Result a -> Result a -> Maybe (Result a)
