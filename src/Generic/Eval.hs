@@ -8,7 +8,6 @@ import Data.Set qualified as Set
 import Generic.Algebra
 
 --- Evaluation:
-
 -- Each element is a tuple (shound be homogenous)
 data Result a where
   With :: (Set [a]) -> Result a

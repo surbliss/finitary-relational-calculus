@@ -11,10 +11,8 @@ module Generic.Term (
   (/\),
   (\/),
   (><),
-  -- perm,
   proj,
   diag,
-  -- join,
   eval,
   pprint,
 )

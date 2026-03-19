@@ -23,10 +23,6 @@ module Generic.Algebra (
 
 import Relude.Unsafe qualified as Unsafe
 
--- import Data.List (intercalate, nub, tails)
--- import Data.List.NonEmpty (NonEmpty ((:|)), nonEmpty, toList)
--- import Data.List.NonEmpty qualified as NE
-
 data Finitary a = Finite a | Cofinite a deriving (Eq, Ord, Show, Functor)
 
 newtype Intersection a = Intersection [Finitary a] deriving (Eq, Ord, Show, Functor)
@@ -83,8 +79,7 @@ instance InternalAlgebra Intersection where
   -- (21), i.e. DeMorgan
   compl' (Intersection (x : xs)) = compl' x \/ compl' (Intersection xs)
 
-  -- Note that xs/ys = [] acts asunivUnion here!
-
+  -- Note that xs/ys = [] acts as univ Union here!
   Intersection xs /\ Intersection ys | True `elem` isOp = empty1
     where
       isOp = [x `opp` y | (x : zs) <- tails (xs <> ys), y <- zs]
@@ -134,13 +129,6 @@ instance InternalAlgebra Union where
       xIntersections = map (x /\) ys
   Union (x : xs) /\ Union ys = (single x /\ Union ys) \/ (Union xs /\ Union ys)
 
-  -- Union [x] /\ Union (y : ys) = (x /\ y) \/ single x /\ Union ys
-  -- Union (x : xs) /\ Union (y : ys) =
-  --   (x /\ y)
-  --     \/ (single x /\ Union ys)
-  --     \/ (Union xs /\ single y)
-  --     \/ (Union xs /\ Union ys)
-
   -- (31)-(32) + emptyUnion products
   Union [] >< _ = empty1
   _ >< Union [] = empty1
@@ -153,8 +141,7 @@ instance InternalAlgebra Union where
   -- Note that xs/ys = [] acts as empty-set, so these lines are technically unecessary
   x \/ Union [] = x
   Union [] \/ x = x
-  -- Filter univs away here! I.e. 1 x 1 x 1
-  -- WRONG: Should not filter univs, should turn everything _into_ univ!
+  -- Filter univs away here
   Union xs \/ Union ys
     | hasUnivs = univs
     | otherwise = Union $ ordNub $ xs <> ys
@@ -164,14 +151,10 @@ instance InternalAlgebra Union where
       univs = single $ Times $ (const $ Intersection []) <$> ps
       Times ps = xs Unsafe.!! 0
 
---- Relational algegra-functions
--- perm :: [Int] -> Union a -> Union a
--- perm = undefined
-
 --- First arg: Coordinate of removed val
 proj :: (Ord a) => Int -> Union a -> Union a
 -- Empty union.
--- NOTE: Maybe proj on Ø should be an error instead? Hm
+-- NOTE: Maybe proj on Ø should be an error instead?
 proj i _ | i < 1 = error "Projection index under 1"
 proj _ (Union []) = empty1
 -- First product has dim 1, so all products have dim 1, so projection is empty
@@ -191,7 +174,6 @@ diag :: (Ord a) => Union a -> Union a
 diag (Union []) = Union []
 diag (Union xs) = foldr (\/) empty1 (map diagProd xs)
 
--- TODO: Normalize, to remove potential 'univs'
 diagProd :: (Ord a) => Times a -> Union a
 diagProd (Times (_ :| [])) = error "Term-constructor should prevent diag on dim=1"
 diagProd (Times (Intersection xs :| Intersection ys : zs)) =

@@ -369,15 +369,11 @@ genNode n = sized $ \size -> case size of
 --- Shrinking functions
 shrinkWild :: Wild -> [Wild]
 shrinkWild Nothing = []
--- shrinkWild Univ = [Nothing]
 shrinkWild (Just w) = [nonEmpty w' | w' <- shrinkNodeSameDim w]
 
 shrinkWildDecreaseDim :: Wild -> [Wild]
 shrinkWildDecreaseDim Nothing = []
--- shrinkWildDecreaseDim Univ = [Univ]
 shrinkWildDecreaseDim (Just w) = [nonEmpty w' | w' <- shrinkNodeDecreaseDim w]
-
--- shrinkWild (Just w) = [Just w' | w' <- shrink w, not (isEmptyRelation w)]
 
 shrinkBranchesSameDim :: Branches -> [Branches]
 shrinkBranchesSameDim (_, 0) = []
@@ -385,10 +381,6 @@ shrinkBranchesSameDim (_, 1) = []
 shrinkBranchesSameDim (xs, n) =
   [(IntMap.delete x xs, n - 1) | x <- IntMap.keys xs]
     <> [(IntMap.insert x rx' xs, n) | (x, rx) <- IntMap.assocs xs, rx' <- shrinkNodeSameDim rx]
-
--- shrinkKeys = [B (IntMap.insert x (removeEmpty v') xs) | (x, v) <- IntMap.assocs xs, v' <- shrinkRelSameDim v]
-
--- shrinkVal = [B $ IntMap.insert k v' xs | (k, v) <- IntMap.assocs xs, v' <- shrink v, not (isEmptyRelation v')]
 
 shrinkRelSameDim :: Relation -> [Relation]
 shrinkRelSameDim (xs, w, n) = branchShrinks <> wildShrinks
@@ -423,7 +415,6 @@ shrinkRelDecreaseDim (xs, w, _) = [x | N x <- (wildNodes <> branchesNodes)]
     branchesNodes = IntMap.elems as
     wildNodes = case w of
       Nothing -> []
-      -- Univ -> pure $ univN (depth r - 1)
       Just x -> [x]
 
 ---------------------------------------------------
@@ -433,7 +424,6 @@ hasEmpty :: Relation -> Bool
 hasEmpty r
   | isEmptyRelation r = True
 hasEmpty ((xs, _), w, _) = case w of
-  -- Univ -> any hasEmpty xs
   Nothing -> IntMap.null xs || any nodeHasEmpty xs
   Just v -> any nodeHasEmpty xs || nodeHasEmpty v
   where
