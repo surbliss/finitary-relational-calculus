@@ -3,9 +3,12 @@
 module Set.Query
 where
 
-import Text.Show qualified
-
+import Data.IntMap.Strict (IntMap)
+import Data.IntSet (IntSet)
 import Data.IntSet qualified as IntSet
+import Data.List (intercalate)
+import Data.Set (Set)
+import GHC.TypeLits (Nat)
 
 --- Invariant: With/Without _never_ contain the empty set!
 data Base = With IntSet | Without IntSet deriving (Eq, Ord)

@@ -21,7 +21,8 @@ module Generic.Algebra (
   opp,
 ) where
 
-import Relude.Unsafe qualified as Unsafe
+import Data.List (intercalate, nub, tails)
+import Data.List.NonEmpty (NonEmpty ((:|)), nonEmpty)
 
 data Finitary a = Finite a | Cofinite a deriving (Eq, Ord, Show, Functor)
 
@@ -83,7 +84,7 @@ instance InternalAlgebra Intersection where
   Intersection xs /\ Intersection ys | True `elem` isOp = empty1
     where
       isOp = [x `opp` y | (x : zs) <- tails (xs <> ys), y <- zs]
-  Intersection xs /\ Intersection ys = single $ Intersection $ ordNub $ xs <> ys
+  Intersection xs /\ Intersection ys = single $ Intersection $ nub $ xs <> ys
 
   x >< y = single $ Times $ x :| [y]
 
@@ -144,12 +145,12 @@ instance InternalAlgebra Union where
   -- Filter univs away here
   Union xs \/ Union ys
     | hasUnivs = univs
-    | otherwise = Union $ ordNub $ xs <> ys
+    | otherwise = Union $ nub $ xs <> ys
     where
       hasUnivs = any isUniv xs || any isUniv ys
       isUniv (Times zs) = all (\(Intersection is) -> null is) zs
       univs = single $ Times $ (const $ Intersection []) <$> ps
-      Times ps = xs Unsafe.!! 0
+      Times ps = xs !! 0
 
 --- First arg: Coordinate of removed val
 proj :: (Ord a) => Int -> Union a -> Union a
@@ -209,7 +210,7 @@ instance (PrettyShow a) => PrettyShow (Intersection a) where
 
 instance (PrettyShow a) => PrettyShow (Times a) where
   pshow (Times (x :| [])) = pshow x
-  pshow (Times xs) = withParens $ withOp " × " (toList xs)
+  pshow (Times (x :| xs)) = withParens $ withOp " × " (x : xs)
 
 instance (PrettyShow a) => PrettyShow (Union a) where
   pshow (Union []) = "∅"

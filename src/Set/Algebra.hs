@@ -2,8 +2,12 @@ module Set.Algebra
 where
 
 import Control.Exception (assert)
+import Data.IntSet (IntSet)
 import Data.IntSet qualified as IntSet
+import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.List.NonEmpty qualified as NE
+import Data.Set (Set)
 import Data.Set qualified as Set
 import PrettyShow
 
@@ -235,7 +239,7 @@ s >< s' =
     --- Non-trivial Unions
     --- Timess (Now there are no unions!)
     (Times xs@(_ :| _), Times ys@(_ :| _)) -> Times $ xs <> ys
-    (x@(Base _), Times xs@(_ :| _)) -> Times $ one x <> xs
+    (x@(Base _), Times (y :| ys)) -> Times $ x :| (y : ys)
     (Times xs@(_ :| _), x@(Base _)) -> Times $ NE.appendList xs [x]
 
 ---------------------------------------------------

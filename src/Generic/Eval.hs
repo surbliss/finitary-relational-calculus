@@ -4,6 +4,9 @@
 module Generic.Eval where
 
 import Control.Monad (foldM)
+import Data.Function ((&))
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Set (Set)
 import Data.Set qualified as Set
 import Generic.Algebra
 

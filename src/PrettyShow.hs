@@ -1,7 +1,11 @@
 module PrettyShow where
 
+import Data.IntMap.Strict (IntMap)
 import Data.IntMap.Strict qualified as IntMap
+import Data.IntSet (IntSet)
 import Data.IntSet qualified as IntSet
+import Data.List (intercalate)
+import Data.Set (Set, toList)
 
 class PrettyShow a where
   pshow :: a -> String

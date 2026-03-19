@@ -4,10 +4,14 @@
 module Dict.Algebra where
 
 import Control.Exception (assert)
+import Control.Monad (guard)
+import Data.Function ((&))
+import Data.Functor ((<&>))
+import Data.IntMap.Strict (IntMap)
 import Data.IntMap.Strict qualified as IntMap
+import Data.List (intercalate)
 import PrettyShow
 import Test.QuickCheck hiding ((><))
-import Prelude hiding (Alternative (empty), nonEmpty)
 
 type Wild = Maybe Node
 type Branches = (IntMap Node, Int) -- Map with its size

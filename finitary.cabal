@@ -12,18 +12,11 @@ common common
     GHC.TypeLits.Normalise
 
   default-language: GHC2024
-  default-extensions: OverloadedStrings
-  mixins:
-    base hiding (Prelude),
-    relude (Relude as Prelude),
-    relude,
-
   build-depends:
     QuickCheck,
     base,
     containers,
     ghc-typelits-natnormalise,
-    relude,
     tasty,
     tasty-hunit,
     tasty-quickcheck,
