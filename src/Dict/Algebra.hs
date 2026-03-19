@@ -15,7 +15,7 @@ import Test.QuickCheck hiding ((><))
 
 type Wild = Maybe Node
 type Branches = (IntMap Node, Int) -- Map with its size
-data Node = Empty | N Relation | End deriving (Show, Eq, Ord)
+data Node = N Relation | End deriving (Show, Eq, Ord)
 type Relation = (Branches, Wild, Int) -- Relation with its depth
 ---------------------------------------------------
 -- Dictionary-helpers
@@ -82,7 +82,7 @@ instance Algebra Wild where
 
   Nothing \/ x = x
   x \/ Nothing = x
-  Just w \/ Just v = Just (w \/ v)
+  Just w \/ Just v = nonEmpty (w \/ v)
 
   Nothing \\ _ = empty
   x \\ Nothing = x
@@ -97,56 +97,39 @@ instance Algebra Wild where
 -- Note: Wild _can't_ be negated, because we don't know how deep 'Empty' is outside of a relation!
 
 -- Q: Should we assert only End with End here?
-node :: Relation -> Node
-node r
-  | isEmptyRelation r = Empty
-  | otherwise = N r
 instance Algebra Node where
   End /\ End = End
-  Empty /\ _ = Empty
-  _ /\ Empty = Empty
-  End /\ _ = error "/\\Right node deeper"
+  End /\ _ = error "/\\ Right node deeper"
   _ /\ End = error "/\\ Left node deeper"
-  N r /\ N s = node (r /\ s)
+  N r /\ N s = N (r /\ s)
 
   End \/ End = End
-  Empty \/ x = x
-  x \/ Empty = x
   End \/ _ = error "\\/ Right node deeper"
   _ \/ End = error "\\/ Left node deeper"
   N r \/ N s = N (r \/ s)
 
-  End \\ End = Empty
-  Empty \\ _ = Empty
-  x \\ Empty = x
+  End \\ End = empty
   End \\ _ = error "\\\\ Right node deeper"
   _ \\ End = error "\\\\ Left node deeper"
-  N x \\ N y = node (x \\ y)
+  N x \\ N y = N (x \\ y)
 
-  End <+> End = Empty
-  Empty <+> x = x
-  x <+> Empty = x
+  End <+> End = empty
   End <+> _ = error "<+> Right node deeper"
   _ <+> End = error "<+> Left node deeper"
-  N x <+> N y = node (x <+> y)
+  N x <+> N y = N (x <+> y)
 
-  empty = Empty
-
-instance Negatable Node where
-  univ = End
-
-  neg End = empty
-  neg Empty = univ
-  neg (N r) = node (neg r)
+  empty = N empty
 
 --- Some helper-functions for Algebra Relation instance below:
 -- Lookup x into first branch, and compute x /\ (y + w) if  present
 interSym :: Branches -> Branches -> Node -> Branches
 interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
   where
-    comb x ra = case (IntMap.lookup x ys) of
-      Nothing -> nonEmpty (ra /\ wy)
-      Just rx -> nonEmpty $ ra /\ (rx <+> wy)
+    comb x ra = case (ra, IntMap.lookup x ys) of
+      (End, Nothing) -> Just wy
+      (End, Just rx) -> nonEmpty $ (rx <+> wy)
+      (_, Nothing) -> nonEmpty (ra /\ wy)
+      (_, Just rx) -> nonEmpty $ ra /\ (rx <+> wy)
 
 -- Lookup x into first branch, and compute x /\ y if  present
 inter :: Branches -> Node -> Branches
@@ -172,12 +155,13 @@ instance Algebra Relation where
   empty = (empty, empty, 1)
 
 instance Negatable Relation where
-  neg (_, _, 0) = error "Can't negate 0-dim"
+  neg (_, _, n) | n < 1 = error "Can't negate non-positive-dim"
   neg (xs, Nothing, n) = (xs, Just ((univN (n - 1))), n)
-  neg (xs, Just w, n) = (xs, nonEmpty (neg w), n)
+  neg (xs, Just End, n) = assert (n == 1) (xs, Nothing, n)
+  neg (xs, Just (N x), n) = (xs, nonEmpty (N (neg x)), n)
 
   -- Univ relation is {* -> E}
-  univ = (empty, Just univ, 1)
+  univ = (empty, Just End, 1)
 
 --- For all these: Only do the 'isEmptyRelation' check in the actual relation definition
 instance Extendable Branches where
@@ -185,8 +169,9 @@ instance Extendable Branches where
 
 instance Extendable Node where
   End >< r = N r
-  Empty >< _ = empty
-  N s >< r = N (s >< r)
+  N s >< r
+    | isEmptyRelation s = empty
+    | otherwise = N (s >< r)
 
 instance Extendable Wild where
   Nothing >< _ = Nothing
@@ -206,19 +191,23 @@ Note that these only ever checks _one_ level down, so they are save to use
 inside recursive definitions.
 -}
 isEmptyBranches :: Branches -> Bool
-isEmptyBranches (xs, n) | n == 0 = assert (IntMap.null xs) True
-isEmptyBranches _ = False
+isEmptyBranches (xs, n)
+  | n == 0 = assert (IntMap.null xs) True
+  | otherwise = False
 
 isEmptyRelation :: Relation -> Bool
 isEmptyRelation (xs, Nothing, _) = isEmptyBranches xs
 isEmptyRelation _ = False
 
+isEmpty :: Node -> Bool
+isEmpty End = False
+isEmpty (N x) = isEmptyRelation x
+
 nonEmpty :: Node -> Maybe Node
-nonEmpty Empty = Nothing
-nonEmpty x = Just x
+nonEmpty x | isEmpty x = Nothing | otherwise = Just x
 
 removeEmpty :: IntMap Node -> Branches
-removeEmpty xs = branches $ IntMap.filter (/= Empty) xs
+removeEmpty xs = branches $ IntMap.filter (not . isEmpty) xs
 
 univN :: Int -> Node
 univN n | n < 0 = error "Negative dimension for univN"
@@ -235,7 +224,7 @@ finite xs = (branches bs, empty, 1)
     bs = IntMap.fromList assocs
 
 cofinite :: [Int] -> Relation
-cofinite xs = (branches bs, Just univ, 1)
+cofinite xs = (branches bs, Just End, 1)
   where
     assocs = [(i, End) | i <- xs]
     bs = IntMap.fromList assocs
@@ -255,8 +244,9 @@ triples xs = foldr (\/) (empty >< empty >< empty) [finite [x] >< (finite [y]) ><
 ---------------------------------------------------
 instance PrettyShow Node where
   pshow End = "E"
-  pshow Empty = "Ø"
-  pshow (N r) = pshow r
+  pshow (N r)
+    | isEmptyRelation r = "Ø"
+    | otherwise = pshow r
 
 instance PrettyShow Relation where
   pshow (bs, Nothing, n) = "{#" ++ show n ++ ":" ++ pshow bs ++ "}"
@@ -402,12 +392,10 @@ shrinkRelSameDim (xs, w, n) = branchShrinks <> wildShrinks
 
 shrinkNodeSameDim :: Node -> [Node]
 shrinkNodeSameDim End = []
-shrinkNodeSameDim Empty = []
 shrinkNodeSameDim (N r) = [N r' | r' <- shrinkRelSameDim r, not (isEmptyRelation r')]
 
 shrinkNodeDecreaseDim :: Node -> [Node]
 shrinkNodeDecreaseDim End = []
-shrinkNodeDecreaseDim Empty = []
 shrinkNodeDecreaseDim (N r) = [N x | x <- shrinkRelDecreaseDim r]
 
 shrinkRelDecreaseDim :: Relation -> [Relation]
@@ -432,8 +420,7 @@ hasEmpty ((xs, _), w, _) = case w of
   Just v -> any nodeHasEmpty xs || nodeHasEmpty v
   where
     nodeHasEmpty End = False
-    nodeHasEmpty Empty = True
-    nodeHasEmpty (N r) = hasEmpty r
+    nodeHasEmpty (N r) | isEmptyRelation r = True | otherwise = hasEmpty r
 
 emptyRelN :: Int -> Relation
 emptyRelN n = (empty, empty, n)
