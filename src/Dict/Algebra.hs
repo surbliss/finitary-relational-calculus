@@ -1,7 +1,26 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 
-module Dict.Algebra where
+module Dict.Algebra (
+  --- For use
+  Algebra (..),
+  Extendable (..),
+  Relation,
+  emptyRelN,
+  univRelN,
+  neg,
+  finite,
+  cofinite,
+  pairs,
+  triples,
+  --- For testing
+  dim,
+  Relation1 (Rel1),
+  Relation2 (Rel2),
+  Relation3 (Rel3),
+  hasEmpty,
+  isEmptyRelation,
+) where
 
 import Control.Exception (assert)
 import Control.Monad (guard)
@@ -13,10 +32,12 @@ import Data.List (intercalate)
 import PrettyShow
 import Test.QuickCheck hiding ((><))
 
+--- Types
+type Relation = (Branches, Wild, Int) -- Relation with its depth
 type Wild = Maybe Node
 type Branches = (IntMap Node, Int) -- Map with its size
 data Node = N Relation | End deriving (Show, Eq, Ord)
-type Relation = (Branches, Wild, Int) -- Relation with its depth
+
 ---------------------------------------------------
 -- Dictionary-helpers
 ---------------------------------------------------
@@ -31,13 +52,10 @@ count (_, i) = i
 branches :: IntMap Node -> Branches
 branches xs = (xs, IntMap.size xs)
 
--- Helper
-(==>) :: (Negatable a) => a -> a -> a
-x ==> y = neg x \/ y
-
 ---------------------------------------------------
--- Transformer-classes for normalizing
+-- Functions for transforming relations
 ---------------------------------------------------
+--- Typeclass to implement on all data-types
 class Algebra a where
   -- Intersection, Symmetric difference, Union, Difference
   (/\), (\/), (<+>), (\\) :: a -> a -> a
@@ -45,13 +63,24 @@ class Algebra a where
   -- Identity for <+> and \/, annihilator for /\
   empty :: a
 
-class (Algebra a) => Negatable a where
-  neg :: a -> a -- Complement
-  univ :: a -- = neg empty
-
 -- Cartesian product
 class Extendable a where
   (><) :: a -> Relation -> a
+
+-- Extra functions for relations
+neg :: Relation -> Relation -- Complement
+neg (_, _, n) | n < 1 = error "Can't negate non-positive-dim"
+neg (xs, Nothing, n) = (xs, Just ((univN (n - 1))), n)
+neg (xs, Just End, n) = assert (n == 1) (xs, Nothing, n)
+neg (xs, Just (N x), n) = (xs, nonEmpty (N (neg x)), n)
+
+univN :: Int -> Node
+univN n | n < 0 = error "Negative dimension for univN"
+univN 0 = End
+univN n = N (empty, Just (univN (n - 1)), n)
+
+univRelN :: Int -> Relation
+univRelN n = (empty, Just (univN (n - 1)), n)
 
 ---------------------------------------------------
 -- Instantiation of classes
@@ -120,21 +149,6 @@ instance Algebra Node where
 
   empty = N empty
 
---- Some helper-functions for Algebra Relation instance below:
--- Lookup x into first branch, and compute x /\ (y + w) if  present
-interSym :: Branches -> Branches -> Node -> Branches
-interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
-  where
-    comb x ra = case (ra, IntMap.lookup x ys) of
-      (End, Nothing) -> Just wy
-      (End, Just rx) -> nonEmpty $ (rx <+> wy)
-      (_, Nothing) -> nonEmpty (ra /\ wy)
-      (_, Just rx) -> nonEmpty $ ra /\ (rx <+> wy)
-
--- Lookup x into first branch, and compute x /\ y if  present
-inter :: Branches -> Node -> Branches
-inter (xs, _) y = branches $ IntMap.mapMaybe (\x -> nonEmpty (x /\ y)) xs
-
 instance Algebra Relation where
   -- Optimization: If both wildcards are empty, then only iterate over the
   -- set with the fewest number of keys.
@@ -153,15 +167,6 @@ instance Algebra Relation where
   x \\ y = x /\ neg y
 
   empty = (empty, empty, 1)
-
-instance Negatable Relation where
-  neg (_, _, n) | n < 1 = error "Can't negate non-positive-dim"
-  neg (xs, Nothing, n) = (xs, Just ((univN (n - 1))), n)
-  neg (xs, Just End, n) = assert (n == 1) (xs, Nothing, n)
-  neg (xs, Just (N x), n) = (xs, nonEmpty (N (neg x)), n)
-
-  -- Univ relation is {* -> E}
-  univ = (empty, Just End, 1)
 
 --- For all these: Only do the 'isEmptyRelation' check in the actual relation definition
 instance Extendable Branches where
@@ -186,6 +191,21 @@ instance Extendable Relation where
 -- Helper-functions
 ---------------------------------------------------
 
+--- Some helper-functions for Algebra Relation instance below:
+-- Lookup x into first branch, and compute x /\ (y + w) if  present
+interSym :: Branches -> Branches -> Node -> Branches
+interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
+  where
+    comb x ra = case (ra, IntMap.lookup x ys) of
+      (End, Nothing) -> Just wy
+      (End, Just rx) -> nonEmpty $ (rx <+> wy)
+      (_, Nothing) -> nonEmpty (ra /\ wy)
+      (_, Just rx) -> nonEmpty $ ra /\ (rx <+> wy)
+
+-- Lookup x into first branch, and compute x /\ y if  present
+inter :: Branches -> Node -> Branches
+inter (xs, _) y = branches $ IntMap.mapMaybe (\x -> nonEmpty (x /\ y)) xs
+
 {- | Simplifies the data-structures, by removing maps to empty relations
 Note that these only ever checks _one_ level down, so they are save to use
 inside recursive definitions.
@@ -208,11 +228,6 @@ nonEmpty x | isEmpty x = Nothing | otherwise = Just x
 
 removeEmpty :: IntMap Node -> Branches
 removeEmpty xs = branches $ IntMap.filter (not . isEmpty) xs
-
-univN :: Int -> Node
-univN n | n < 0 = error "Negative dimension for univN"
-univN 0 = End
-univN n = N (empty, Just (univN (n - 1)), n)
 
 ---------------------------------------------------
 -- Interface for interacting with Dicts
@@ -365,10 +380,6 @@ shrinkWild :: Wild -> [Wild]
 shrinkWild Nothing = []
 shrinkWild (Just w) = [nonEmpty w' | w' <- shrinkNodeSameDim w]
 
-shrinkWildDecreaseDim :: Wild -> [Wild]
-shrinkWildDecreaseDim Nothing = []
-shrinkWildDecreaseDim (Just w) = [nonEmpty w' | w' <- shrinkNodeDecreaseDim w]
-
 shrinkBranchesSameDim :: Branches -> [Branches]
 shrinkBranchesSameDim (_, 0) = []
 shrinkBranchesSameDim (_, 1) = []
@@ -393,10 +404,6 @@ shrinkRelSameDim (xs, w, n) = branchShrinks <> wildShrinks
 shrinkNodeSameDim :: Node -> [Node]
 shrinkNodeSameDim End = []
 shrinkNodeSameDim (N r) = [N r' | r' <- shrinkRelSameDim r, not (isEmptyRelation r')]
-
-shrinkNodeDecreaseDim :: Node -> [Node]
-shrinkNodeDecreaseDim End = []
-shrinkNodeDecreaseDim (N r) = [N x | x <- shrinkRelDecreaseDim r]
 
 shrinkRelDecreaseDim :: Relation -> [Relation]
 shrinkRelDecreaseDim (_, _, n) | n <= 1 = []
@@ -424,6 +431,3 @@ hasEmpty ((xs, _), w, _) = case w of
 
 emptyRelN :: Int -> Relation
 emptyRelN n = (empty, empty, n)
-
-univRelN :: Int -> Relation
-univRelN n = (empty, Just (univN (n - 1)), n)
