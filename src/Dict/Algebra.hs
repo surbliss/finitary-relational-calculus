@@ -21,6 +21,9 @@ module Dict.Algebra (
   hasEmpty,
   isEmptyRelation,
   countRel,
+  --- For Term generator
+  genRelation,
+  shrinkRelSameDim,
 ) where
 
 import Control.Exception (assert)

@@ -13,17 +13,20 @@ module Dict.Term (
   (\/),
   (><),
   (\\),
-  (==>),
   --- Testing
   dictdim,
   count,
   termdim,
+  --- tmp
+  exs,
 )
 where
 
 import Data.Proxy (Proxy (..))
 import Dict.Algebra qualified as A
 import GHC.TypeLits (KnownNat, Nat, natVal, type (+))
+import Test.QuickCheck hiding ((><))
+
 import PrettyShow
 
 ---------------------------------------------------
@@ -82,10 +85,6 @@ Term x >< Term y = Term (x A.>< y)
 (\\) :: Term n -> Term n -> Term n
 Term x \\ Term y = Term (x A.\\ y)
 
--- Implies
-(==>) :: Term n -> Term n -> Term n
-Term x ==> Term y = Term (A.neg x A.\/ y)
-
 instance PrettyShow (Term n) where
   pshow (Term x) = pshow x
 
@@ -105,9 +104,15 @@ termdim _ = fromIntegral (natVal (Proxy @n))
 
 ---------------------------------------------------
 -- Not exported
----------------------------------------------------
-
----------------------------------------------------
--- Not exported
----------------------------------------------------
+--------------------------------------------------
 --- Generator
+instance (KnownNat n) => Arbitrary (Term n) where
+  arbitrary = Term <$> A.genRelation (fromIntegral (natVal (Proxy @n)))
+
+  shrink (Term x) = Term <$> A.shrinkRelSameDim x
+
+--- tmp
+exs :: forall n. (KnownNat n) => Proxy n -> IO ()
+exs Proxy = do
+  xs <- sample' (arbitrary :: Gen (Term n))
+  mapM_ pprint xs
