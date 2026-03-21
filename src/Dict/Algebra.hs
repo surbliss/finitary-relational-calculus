@@ -94,20 +94,17 @@ univRelN n = (empty, Just (univN (n - 1)), n)
 ---------------------------------------------------
 instance Algebra Branches where
   (xs, _) \\ (ys, _) = branches $ IntMap.differenceWith (\x y -> nonEmpty $ x \\ y) xs ys
-
-  -- x \\ y and y \\ x must be disjoint, so we are free to combine the branches
-  -- with <+> or \/.
   (xs, _) <+> (ys, _) = removeEmpty $ IntMap.unionWith (<+>) xs ys
+  (xs, _) \/ (ys, _) = branches $ IntMap.unionWith (\/) xs ys
+
   (xs, n) /\ (ys, m)
     | n < m = combineWith xs ys
     | otherwise = combineWith ys xs
     where
       combineWith as bs = branches $ IntMap.mapMaybeWithKey (comb bs) as
-      comb bs a ra = case (IntMap.lookup a bs) of
-        Nothing -> Nothing
-        Just rb -> nonEmpty (ra /\ rb)
-
-  (xs, _) \/ (ys, _) = branches $ IntMap.unionWith (\/) xs ys
+      comb bs a ra = do
+        rb <- (IntMap.lookup a bs)
+        nonEmpty (ra /\ rb)
 
   empty = (IntMap.empty, 0)
 
@@ -118,7 +115,7 @@ instance Algebra Wild where
 
   Nothing \/ x = x
   x \/ Nothing = x
-  Just w \/ Just v = nonEmpty (w \/ v)
+  Just w \/ Just v = Just (w \/ v)
 
   Nothing \\ _ = empty
   x \\ Nothing = x
@@ -164,8 +161,8 @@ instance Algebra Relation where
     (Nothing, Just y) -> (interSym xs ys y, Nothing, n)
     (Just x, Nothing) -> (interSym ys xs x, Nothing, n)
     (Just x, Just y)
-      | count xs < count ys -> (interSym xs ys y <+> inter ys x, v /\ w, n)
-      | otherwise -> (inter xs y <+> interSym ys xs x, v /\ w, n)
+      | count xs < count ys -> (interSym xs ys y <+> interNode ys x, v /\ w, n)
+      | otherwise -> (interNode xs y <+> interSym ys xs x, v /\ w, n)
 
   (bs, v, n) <+> (cs, w, m) = assert (n == m) $ (bs <+> cs, v <+> w, n)
 
@@ -210,8 +207,8 @@ interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
       (_, Just rx) -> nonEmpty $ ra /\ (rx <+> wy)
 
 -- Lookup x into first branch, and compute x /\ y if  present
-inter :: Branches -> Node -> Branches
-inter (xs, _) y = branches $ IntMap.mapMaybe (\x -> nonEmpty (x /\ y)) xs
+interNode :: Branches -> Node -> Branches
+interNode (xs, _) y = branches $ IntMap.mapMaybe (\x -> nonEmpty (x /\ y)) xs
 
 {- | Simplifies the data-structures, by removing maps to empty relations
 Note that these only ever checks _one_ level down, so they are save to use
