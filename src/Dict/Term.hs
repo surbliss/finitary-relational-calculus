@@ -38,7 +38,7 @@ finite :: [Int] -> Term 1
 finite xs = Term (A.finite xs)
 
 cofinite :: [Int] -> Term 1
-cofinite xs = Term (A.finite xs)
+cofinite xs = Term (A.cofinite xs)
 
 fin :: Int -> Term 1
 fin x = finite [x]
@@ -103,4 +103,11 @@ count (Term x) = A.countRel x
 termdim :: forall n. (KnownNat n) => Term n -> Nat
 termdim _ = fromIntegral (natVal (Proxy @n))
 
+---------------------------------------------------
+-- Not exported
+---------------------------------------------------
+
+---------------------------------------------------
+-- Not exported
+---------------------------------------------------
 --- Generator

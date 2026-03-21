@@ -268,21 +268,26 @@ instance PrettyShow Node where
     | otherwise = pshow r
 
 instance PrettyShow Relation where
-  pshow (bs, Nothing, n) = "{#" ++ show n ++ ":" ++ pshow bs ++ "}"
-  pshow (bs, w, n) = "{#" ++ show n ++ ":" ++ pshow bs ++ ", " ++ pshow w ++ "}"
+  pshow r@(_, _, 1) = "{" ++ intercalate ", " (keysAndWild r) ++ "}"
+  pshow (bs, Nothing, _) = "{" ++ pshow bs ++ "}"
+  pshow (bs, w, _) | isEmptyBranches bs = "{" ++ pshow w ++ "}"
+  pshow (bs, w, _) = "{" ++ pshow bs ++ ", " ++ pshow w ++ "}"
+
+keysAndWild :: Relation -> [String]
+keysAndWild ((bs, _), Nothing, _) | IntMap.null bs = []
+keysAndWild ((bs, _), w, _) | IntMap.null bs = [pshow w]
+keysAndWild ((bs, _), Nothing, _) = pshow <$> IntMap.keys bs
+keysAndWild ((bs, _), w@(Just _), _) = (pshow <$> IntMap.keys bs) <> [pshow w]
 
 instance PrettyShow Branches where
-  pshow (xs, n) =
-    assert (IntMap.size xs == n) xs
-      & IntMap.toAscList
-      & map pshowBranch
-      & intercalate ", "
+  pshow (xs, _) = xs & IntMap.toAscList & map pshowBranch & intercalate ", "
     where
-      pshowBranch (x, rx) = show x ++ "->" ++ pshow rx
+      pshowBranch (x, rx) = show x ++ " -> " ++ pshow rx
 
 instance PrettyShow Wild where
   pshow w = case w of
     Nothing -> ""
+    Just End -> "*"
     Just a -> "* -> " <> pshow a
 
 ---------------------------------------------------
