@@ -20,6 +20,7 @@ module Dict.Algebra (
   Relation3 (Rel3),
   hasEmpty,
   isEmptyRelation,
+  countRel,
 ) where
 
 import Control.Exception (assert)
@@ -47,6 +48,9 @@ dim (_, _, n) = n
 
 count :: Branches -> Int
 count (_, i) = i
+
+countRel :: Relation -> Int
+countRel (xs, _, _) = count xs
 
 -- Just computes the size, and adds that
 branches :: IntMap Node -> Branches
