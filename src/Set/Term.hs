@@ -2,17 +2,19 @@
 {-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
 
 module Set.Term (
+  Term,
   fins,
   cfins,
   fin,
   cfin,
+  pairs,
   empty,
   univ,
   compl,
   (/\),
   (\/),
   (><),
-  (-->),
+  (==>),
   (\\),
   proj,
   forAll,
@@ -21,7 +23,6 @@ module Set.Term (
 
 import PrettyShow
 import Set.Algebra qualified as A
-import Prelude hiding (empty)
 
 import GHC.TypeLits
 
@@ -46,6 +47,9 @@ fin x = fins [x]
 
 cfin :: Int -> Term 1
 cfin x = cfins [x]
+
+pairs :: [(Int, Int)] -> Term 2
+pairs xs = Term $ A.pairs xs
 
 -- Need to specify dimension manually
 empty :: Term 1
@@ -83,8 +87,8 @@ proj i (Term x) = Term $ A.proj i x
 
 --- Extras - aliases to easier read FOL queries
 -- Implies
-(-->) :: Term n -> Term n -> Term n
-x --> y = compl x \/ y
+(==>) :: Term n -> Term n -> Term n
+x ==> y = compl x \/ y
 
 exists :: Int -> Term (n + 2) -> Term (n + 1)
 exists = proj

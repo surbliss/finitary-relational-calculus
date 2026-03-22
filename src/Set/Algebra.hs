@@ -102,6 +102,12 @@ fins :: [Int] -> Algebra
 fins [] = Base $ Empty
 fins xs = Base $ With $ IntSet.fromList xs
 
+pairs :: [(Int, Int)] -> Algebra
+pairs xs = Union $ Set.fromList $ map toProd xs
+  where
+    base x = Base $ With $ IntSet.singleton x
+    toProd (x, y) = Times ((base x) :| [base y])
+
 emptyA :: Int -> Algebra
 emptyA n | n < 1 = error "Non-positive univ"
 emptyA 1 = Base Empty
@@ -142,6 +148,7 @@ compl :: Algebra -> Algebra
 compl s = case s of
   Base x -> Base $ baseCompl x
   Times (x :| []) -> compl x
+  -- Rewrite rule (22)
   Times (x :| x' : xs) -> (compl x >< univ (1 + length xs)) \/ (univ 1 >< compl rest)
     where
       rest = Times (x' :| xs)
@@ -179,8 +186,8 @@ s /\ s' =
     --- Invariant: Unions never contain 'Univ', so no intersection can product 'Univ'. We should filter any empty-product out tho
     (Union xs, Union ys) -> Union $ Set.delete emptyProd inters
       where
-        inters = Set.map (uncurry (/\)) pairs
-        pairs = Set.cartesianProduct xs ys
+        inters = Set.map (uncurry (/\)) ps
+        ps = Set.cartesianProduct xs ys
         emptyProd = emptyA (dim s)
     (Union xs, y) -> Union $ (/\ y) `Set.map` xs
     (Times (x :| []), y) -> x /\ y

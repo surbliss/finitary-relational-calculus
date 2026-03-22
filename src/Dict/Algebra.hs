@@ -201,6 +201,7 @@ interSym :: Branches -> Branches -> Node -> Branches
 interSym (xs, _) (ys, _) wy = branches $ IntMap.mapMaybeWithKey comb xs
   where
     comb x ra = case (ra, IntMap.lookup x ys) of
+      -- End acts as univ, so wy cannot be empty
       (End, Nothing) -> Just wy
       (End, Just rx) -> nonEmpty $ (rx <+> wy)
       (_, Nothing) -> nonEmpty (ra /\ wy)
