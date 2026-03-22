@@ -25,6 +25,7 @@ library
   import: common
   exposed-modules:
     Dict.Algebra
+    Dict.Term
     Generic.Algebra
     Generic.Eval
     Generic.Term
