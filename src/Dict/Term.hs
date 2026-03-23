@@ -65,7 +65,7 @@ infixl 6 \/
 infixl 7 ><
 infixl 8 /\
 
---- Instersection (AND)
+--- Intersection (AND)
 (/\) :: Term n -> Term n -> Term n
 Term x /\ Term y = Term (x A./\ y)
 
@@ -99,19 +99,17 @@ dictdim (Term x) = A.dim x
 count :: Term n -> Int
 count (Term x) = A.countRel x
 
-termdim :: forall n. (KnownNat n) => Term n -> Nat
+termdim :: forall n. (KnownNat n) => Term n -> Int
 termdim _ = fromIntegral (natVal (Proxy @n))
 
----------------------------------------------------
--- Not exported
---------------------------------------------------
---- Generator
+--- Generator (not yet used)
+--- TODO: Rewrite tests to use the Term instance (which guarantees dimension)
 instance (KnownNat n) => Arbitrary (Term n) where
   arbitrary = Term <$> A.genRelation (fromIntegral (natVal (Proxy @n)))
 
   shrink (Term x) = Term <$> A.shrinkRelSameDim x
 
---- tmp
+--- TEMP: For testing generator in REPL
 exs :: forall n. (KnownNat n) => Proxy n -> IO ()
 exs Proxy = do
   xs <- sample' (arbitrary :: Gen (Term n))
